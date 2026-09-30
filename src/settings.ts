@@ -101,8 +101,9 @@ export interface Settings {
    * 存储后端选择：
    *   null 或 "r2"  —— 使用 Cloudflare R2 binding（默认，零配置）
    *   "s3"          —— 使用通用 S3 兼容存储（需要配置下面所有 s3_* 字段）
+   *   "webdav"      —— 使用远程 WebDAV 服务器（坚果云 / 阿里云盘 / OneDrive 等支持 WebDAV 的网盘）
    */
-  storageProvider: "r2" | "s3" | null;
+  storageProvider: "r2" | "s3" | "webdav" | null;
   /** S3 endpoint，如 https://s3.amazonaws.com 或 https://oss-cn-hangzhou.aliyuncs.com */
   s3Endpoint: string | null;
   /** S3 region，如 us-east-1、ap-southeast-1 */
@@ -115,6 +116,13 @@ export interface Settings {
   s3SecretKeyCipher: string | null;
   /** S3 addressing style: "path"（默认）或 "virtual" */
   s3AddressingStyle: "path" | "virtual" | null;
+  // ═══════ 远程 WebDAV 挂载（出站） ═══════
+  /** 远程 WebDAV 服务器 URL，如 https://dav.jianguoyun.com/dav/ 或 https://pan.aliyundrive.com/webdav */
+  storageWebdavUrl: string | null;
+  /** 远程 WebDAV 认证用户名 */
+  storageWebdavUsername: string | null;
+  /** 远程 WebDAV 密码 —— 用 admin AES-GCM 加密后存 */
+  storageWebdavPasswordCipher: string | null;
 
   // ═══════ WebDAV 支持 ═══════
   /** 是否启用 WebDAV 服务（挂载点 /webdav/） */
@@ -125,6 +133,10 @@ export interface Settings {
   webdavPasswordHash: string | null;
   /** WebDAV 可访问的根目录（默认 "/" = 全部文件；可设 "/shared" 等限制范围） */
   webdavRootPath: string;
+
+  // ═══════ UI 主题 ═══════
+  /** 管理后台 UI 主题："light"（默认白色 Apple 风格）或 "dark"（深色原风格） */
+  uiTheme: "light" | "dark";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -167,11 +179,17 @@ export const DEFAULT_SETTINGS: Settings = {
   s3AccessKeyId: null,
   s3SecretKeyCipher: null,
   s3AddressingStyle: "path",
+  // 远程 WebDAV 挂载 —— 默认未配置
+  storageWebdavUrl: null,
+  storageWebdavUsername: null,
+  storageWebdavPasswordCipher: null,
   // WebDAV —— 默认关闭，启用后通过 Basic Auth 保护
   webdavEnabled: false,
   webdavUsername: "webdav",
   webdavPasswordHash: null,
   webdavRootPath: "/",
+  // UI 主题 —— 默认白色 Apple 风格
+  uiTheme: "light",
 };
 
 function toInt(v: unknown, fallback: number): number {
@@ -243,11 +261,17 @@ export async function getSettings(env: Env): Promise<Settings> {
     s3AccessKeyId: map.get("s3_access_key_id") ?? null,
     s3SecretKeyCipher: map.get("s3_secret_key_cipher") ?? null,
     s3AddressingStyle: (map.get("s3_addressing_style") ?? "path") as Settings["s3AddressingStyle"],
+    // 远程 WebDAV 挂载
+    storageWebdavUrl: map.get("storage_webdav_url") ?? null,
+    storageWebdavUsername: map.get("storage_webdav_username") ?? null,
+    storageWebdavPasswordCipher: map.get("storage_webdav_password_cipher") ?? null,
     // WebDAV
     webdavEnabled: map.get("webdav_enabled") === "1",
     webdavUsername: map.get("webdav_username") ?? DEFAULT_SETTINGS.webdavUsername,
     webdavPasswordHash: map.get("webdav_password_hash") ?? null,
     webdavRootPath: map.get("webdav_root_path") ?? DEFAULT_SETTINGS.webdavRootPath,
+    // UI 主题
+    uiTheme: (map.get("ui_theme") ?? DEFAULT_SETTINGS.uiTheme) as Settings["uiTheme"],
   };
 
   // ② 写入内存缓存

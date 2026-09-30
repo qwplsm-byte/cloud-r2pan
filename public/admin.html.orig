@@ -1,370 +1,99 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>cloud-r2pan</title>
 <style>
-/* ═══════════════════════════════════════════════════════════
-   默认主题：简洁暗色（无玻璃模糊）
-   ═══════════════════════════════════════════════════════════ */
 :root {
-  --bg-page: #0f0f10;
-  --orb-1: transparent; --orb-2: transparent; --orb-3: transparent;
-  --orb-opacity: 0;
-
-  --glass: #1c1c1f;
-  --glass-strong: #242428;
-  --stroke: rgba(255,255,255,.08);
-  --stroke-strong: rgba(255,255,255,.14);
-
-  --text: #f0f0f2;
-  --text-2: rgba(255,255,255,.58);
-  --text-3: rgba(255,255,255,.34);
-
-  --sf-soft: rgba(255,255,255,.04);
-  --sf: rgba(255,255,255,.055);
-  --sf-strong: rgba(255,255,255,.09);
-  --sf-input: rgba(255,255,255,.07);
-  --sf-input-focus: rgba(255,255,255,.11);
-
-  --shadow-soft: 0 2px 8px rgba(0,0,0,.4);
-  --shadow-topbar: 0 2px 6px rgba(0,0,0,.4);
-  --shadow-inset-hi: none;
-  --shadow-glass: 0 1px 3px rgba(0,0,0,.5);
-  --shadow-topbar-box: 0 1px 3px rgba(0,0,0,.5);
-  --shadow-modal: 0 10px 40px rgba(0,0,0,.5);
-  --shadow-btn-primary: 0 2px 6px rgba(10,124,255,.3);
-  --shadow-btn-danger: 0 2px 6px rgba(255,69,58,.18);
-  --shadow-btn-plain: 0 1px 0 rgba(0,0,0,.5);
-  --shadow-btn-plain-hover: 0 1px 4px rgba(0,0,0,.5);
-  --shadow-spinner-track: rgba(255,255,255,.12);
-  --shadow-switch-thumb: 0 1px 3px rgba(0,0,0,.5);
-  --shadow-toast: 0 6px 20px rgba(0,0,0,.6);
-  --shadow-logo: none;
-
-  --scrollbar-thumb: rgba(255,255,255,.12);
-  --track-bg: rgba(255,255,255,.1);
-  --bar-bg: rgba(255,255,255,.1);
-  --tbl-divider: rgba(255,255,255,.06);
-  --tbl-hover: rgba(255,255,255,.05);
-  --tbl-row-border: rgba(255,255,255,.07);
-  --dashed-border: rgba(255,255,255,.22);
-  --dropzone-bg: rgba(255,255,255,.025);
-  --dropzone-hover-bg: rgba(255,255,255,.06);
-  --dashed-border-strong: rgba(255,255,255,.45);
-  --btn-hover-bg: rgba(255,255,255,.1);
-  --btn-danger-bg: rgba(255,69,58,.1);
-  --btn-danger-bg-hover: rgba(255,69,58,.18);
-  --btn-danger-bg-active: rgba(255,69,58,.26);
-  --btn-danger-border: rgba(255,69,58,.28);
-  --btn-danger-color: #ffb3ae;
-  --radius: 18px;
-  --blue: #0a84ff;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   简洁亮色
-   ═══════════════════════════════════════════════════════════ */
-:root[data-theme="light"] {
-  --bg-page: #f5f5f7;
-  --orb-1: transparent; --orb-2: transparent; --orb-3: transparent;
-  --orb-opacity: 0;
-
-  --glass: #ffffff;
-  --glass-strong: #ffffff;
-  --stroke: rgba(0,0,0,.07);
-  --stroke-strong: rgba(0,0,0,.14);
-
-  --text: #1d1d1f;
-  --text-2: rgba(0,0,0,.58);
-  --text-3: rgba(0,0,0,.35);
-
-  --sf-soft: rgba(0,0,0,.04);
-  --sf: rgba(0,0,0,.055);
-  --sf-strong: rgba(0,0,0,.09);
-  --sf-input: rgba(0,0,0,.05);
-  --sf-input-focus: rgba(0,0,0,.08);
-
-  --shadow-soft: 0 1px 3px rgba(0,0,0,.08);
-  --shadow-topbar: 0 1px 2px rgba(0,0,0,.08);
-  --shadow-inset-hi: none;
-  --shadow-glass: 0 1px 3px rgba(0,0,0,.08);
-  --shadow-topbar-box: 0 1px 2px rgba(0,0,0,.08);
-  --shadow-modal: 0 10px 40px rgba(0,0,0,.12);
-  --shadow-btn-primary: 0 2px 6px rgba(10,124,255,.25);
-  --shadow-btn-danger: 0 2px 6px rgba(255,69,58,.12);
-  --shadow-btn-plain: 0 1px 0 rgba(0,0,0,.08);
-  --shadow-btn-plain-hover: 0 1px 4px rgba(0,0,0,.08);
-  --shadow-spinner-track: rgba(0,0,0,.1);
-  --shadow-switch-thumb: 0 1px 3px rgba(0,0,0,.2);
-  --shadow-toast: 0 6px 20px rgba(0,0,0,.12);
-  --shadow-logo: none;
-
-  --scrollbar-thumb: rgba(0,0,0,.12);
-  --track-bg: rgba(0,0,0,.12);
-  --bar-bg: rgba(0,0,0,.1);
-  --tbl-divider: rgba(0,0,0,.06);
-  --tbl-hover: rgba(0,0,0,.04);
-  --tbl-row-border: rgba(0,0,0,.07);
-  --dashed-border: rgba(0,0,0,.22);
-  --dropzone-bg: rgba(0,0,0,.025);
-  --dropzone-hover-bg: rgba(0,0,0,.05);
-  --dashed-border-strong: rgba(0,0,0,.45);
-  --btn-hover-bg: #ffffff;
-  --btn-danger-bg: rgba(255,59,48,.08);
-  --btn-danger-bg-hover: rgba(255,59,48,.14);
-  --btn-danger-bg-active: rgba(255,59,48,.2);
-  --btn-danger-border: rgba(255,59,48,.22);
-  --btn-danger-color: #d70015;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Apple 亮色玻璃风（隐藏，需访问 /admin/apple 启用）
-   ═══════════════════════════════════════════════════════════ */
-:root[data-theme="apple"] {
-  --bg-page: linear-gradient(180deg, #f7f7fb 0%, #f0f1f6 100%);
-  --orb-1: #c7e9ff; --orb-2: #d5c6ff; --orb-3: #fbcfe8;
-  --orb-opacity: 0.22;
-
-  --glass: rgba(255,255,255,.88);
-  --glass-strong: rgba(255,255,255,.95);
-  --stroke: rgba(0,0,0,.08);
-  --stroke-strong: rgba(0,0,0,.16);
-
-  --text: #111113;
-  --text-2: rgba(0,0,0,.62);
-  --text-3: rgba(0,0,0,.38);
-
-  --sf-soft: rgba(0,0,0,.04);
-  --sf: rgba(0,0,0,.055);
-  --sf-strong: rgba(0,0,0,.09);
-  --sf-input: rgba(0,0,0,.05);
-  --sf-input-focus: rgba(0,0,0,.08);
-
-  --shadow-soft: 0 4px 24px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.04);
-  --shadow-topbar: 0 2px 12px rgba(0,0,0,.05);
-  --shadow-inset-hi: inset 0 1px 0 rgba(255,255,255,.9);
-  --shadow-glass: 0 4px 24px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.04);
-  --shadow-topbar-box: 0 2px 12px rgba(0,0,0,.05), inset 0 1px 0 rgba(255,255,255,.9);
-  --shadow-modal: 0 10px 40px rgba(0,0,0,.12);
-  --shadow-btn-primary: 0 4px 14px rgba(10,124,255,.28), inset 0 1px 0 rgba(255,255,255,.5);
-  --shadow-btn-danger: 0 4px 14px rgba(255,69,58,.15);
-  --shadow-btn-plain: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
-  --shadow-btn-plain-hover: 0 3px 10px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
-  --shadow-spinner-track: rgba(0,0,0,.12);
-  --shadow-switch-thumb: 0 2px 6px rgba(0,0,0,.18), 0 1px 0 rgba(255,255,255,.6);
-  --shadow-toast: 0 10px 30px rgba(0,0,0,.12);
-  --shadow-logo: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 12px rgba(59,130,246,.35);
-
-  --scrollbar-thumb: rgba(0,0,0,.12);
-  --track-bg: rgba(0,0,0,.12);
-  --bar-bg: rgba(0,0,0,.1);
-  --tbl-divider: rgba(0,0,0,.06);
-  --tbl-hover: rgba(0,0,0,.04);
-  --tbl-row-border: rgba(0,0,0,.07);
-  --dashed-border: rgba(0,0,0,.22);
-  --dropzone-bg: rgba(0,0,0,.025);
-  --dropzone-hover-bg: rgba(0,0,0,.05);
-  --dashed-border-strong: rgba(0,0,0,.45);
-  --btn-hover-bg: #ffffff;
-  --btn-danger-bg: rgba(255,59,48,.08);
-  --btn-danger-bg-hover: rgba(255,59,48,.14);
-  --btn-danger-bg-active: rgba(255,59,48,.2);
-  --btn-danger-border: rgba(255,59,48,.22);
-  --btn-danger-color: #d70015;
-  --radius: 24px;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Apple 暗色玻璃风（隐藏）
-   ═══════════════════════════════════════════════════════════ */
-:root[data-theme="apple-dark"] {
-  --bg-page: linear-gradient(165deg, #0b1026 0%, #151238 42%, #26104a 100%);
-  --orb-1: #22d3ee; --orb-2: #7c5cf6; --orb-3: #ec4899;
-  --orb-opacity: 0.45;
-
   --glass: rgba(255,255,255,.09);
   --glass-strong: rgba(255,255,255,.14);
   --stroke: rgba(255,255,255,.16);
   --stroke-strong: rgba(255,255,255,.28);
-
   --text: #fff;
   --text-2: rgba(255,255,255,.66);
   --text-3: rgba(255,255,255,.42);
-
-  --sf-soft: rgba(255,255,255,.05);
-  --sf: rgba(255,255,255,.07);
-  --sf-strong: rgba(255,255,255,.13);
-  --sf-input: rgba(255,255,255,.09);
-  --sf-input-focus: rgba(255,255,255,.13);
-
-  --shadow-soft: 0 16px 44px rgba(0,0,0,.35);
-  --shadow-topbar: 0 14px 40px rgba(0,0,0,.4);
-  --shadow-inset-hi: inset 0 1px 0 rgba(255,255,255,.22);
-  --shadow-glass: 0 16px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22);
-  --shadow-topbar-box: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25);
-  --shadow-modal: 0 -20px 60px rgba(0,0,0,.5);
-  --shadow-btn-primary: 0 8px 22px rgba(10,124,255,.38), inset 0 1px 0 rgba(255,255,255,.35);
-  --shadow-btn-danger: 0 4px 14px rgba(255,69,58,.2);
-  --shadow-spinner-track: rgba(255,255,255,.18);
-  --shadow-switch-thumb: 0 3px 8px rgba(0,0,0,.35);
-  --shadow-toast: 0 12px 32px rgba(0,0,0,.45);
-
-  --scrollbar-thumb: rgba(255,255,255,.15);
-  --track-bg: rgba(255,255,255,.14);
-  --bar-bg: rgba(255,255,255,.12);
-  --tbl-divider: rgba(255,255,255,.06);
-  --tbl-hover: rgba(255,255,255,.05);
-  --tbl-row-border: rgba(255,255,255,.07);
-  --dashed-border: rgba(255,255,255,.28);
-  --dropzone-bg: rgba(255,255,255,.045);
-  --dropzone-hover-bg: rgba(255,255,255,.1);
-  --dashed-border-strong: rgba(255,255,255,.5);
-  --btn-hover-bg: rgba(255,255,255,.17);
-  --btn-danger-bg: rgba(255,69,58,.16);
-  --btn-danger-bg-hover: rgba(255,69,58,.26);
-  --btn-danger-bg-active: rgba(255,69,58,.36);
-  --btn-danger-border: rgba(255,69,58,.4);
-  --btn-danger-color: #ffb3ae;
+  --blue: #0a84ff;
+  --radius: 24px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
   min-height: 100vh; color: var(--text); position: relative; overflow-x: hidden;
-  background: var(--bg-page);
+  background: linear-gradient(165deg, #0b1026 0%, #151238 42%, #26104a 100%);
   background-attachment: fixed;
   -webkit-tap-highlight-color: transparent;
 }
-::selection { background: rgba(10,132,255,.35); }
+::selection { background: rgba(10,132,255,.4); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 
 /* ── 背景光斑 ─────────────────────────── */
 .orb { position: fixed; border-radius: 50%; filter: blur(100px); opacity: .45; pointer-events: none; animation: drift 22s ease-in-out infinite alternate; z-index: 0; }
-.o1 { width: 52vmax; height: 52vmax; background: var(--orb-1); top: -20%; left: -16%; opacity: var(--orb-opacity); }
-.o2 { width: 44vmax; height: 44vmax; background: var(--orb-2); bottom: -22%; right: -12%; animation-delay: -8s; opacity: var(--orb-opacity); }
-.o3 { width: 30vmax; height: 30vmax; background: var(--orb-3); top: 48%; left: 12%; animation-delay: -15s; opacity: var(--orb-opacity); }
+.o1 { width: 52vmax; height: 52vmax; background: #22d3ee; top: -20%; left: -16%; }
+.o2 { width: 44vmax; height: 44vmax; background: #7c5cf6; bottom: -22%; right: -12%; animation-delay: -8s; }
+.o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 48%; left: 12%; animation-delay: -15s; opacity: .3; }
 @keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(5vw,-6vh) scale(1.15); } }
 
 /* ── 布局 ─────────────────────────────── */
 #app { position: relative; z-index: 1; }
-.wrap { max-width: 1280px; margin: 0 auto; padding: 20px clamp(14px, 3vw, 28px) 60px; }
-.layout { display: flex; gap: 20px; align-items: flex-start; }
-.layout #view { flex: 1; min-width: 0; }
+.wrap { max-width: 1060px; margin: 0 auto; padding: 20px clamp(14px, 3vw, 28px) 60px; }
 
 /* ── 玻璃卡片 ─────────────────────────── */
 .glass {
-  background: var(--glass);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  border: 1px solid var(--stroke);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-glass);
-}
-:root[data-theme="apple"] .glass,
-:root[data-theme="apple-dark"] .glass {
+  background: linear-gradient(150deg, rgba(255,255,255,.12), rgba(255,255,255,.045));
   backdrop-filter: blur(28px) saturate(170%); -webkit-backdrop-filter: blur(28px) saturate(170%);
-  border: 0.5px solid rgba(0,0,0,.08);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22);
 }
-:root[data-theme="apple-dark"] .glass { border: 1px solid var(--stroke-strong); }
 
 /* ── 顶栏 ─────────────────────────────── */
 .topbar {
   position: sticky; top: 12px; z-index: 50; margin-bottom: 22px;
   display: flex; align-items: center; gap: 12px; padding: 12px 18px;
-  background: var(--glass-strong);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  border: 1px solid var(--stroke); border-radius: 22px;
-  box-shadow: var(--shadow-topbar-box);
-}
-:root[data-theme="apple"] .topbar,
-:root[data-theme="apple-dark"] .topbar {
+  background: linear-gradient(150deg, rgba(255,255,255,.13), rgba(255,255,255,.06));
   backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border: 0.5px solid rgba(0,0,0,.08);
+  border: 1px solid var(--stroke-strong); border-radius: 22px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25);
 }
-:root[data-theme="apple-dark"] .topbar { border: 1px solid var(--stroke-strong); box-shadow: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25); }
 .logo { width: 38px; height: 38px; border-radius: 12px; flex: none;
   display: flex; align-items: center; justify-content: center;
   background: linear-gradient(150deg, #67e8f9, #3b82f6 55%, #8b5cf6);
-  box-shadow: var(--shadow-logo); }
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 6px 16px rgba(59,130,246,.4); }
 .logo svg { width: 22px; height: 22px; }
 .topbar h1 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
 .topbar .sub { font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
 .topbar .spacer { flex: 1; }
 .traffic-pill {
   display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 14px;
-  background: var(--sf); border: 1px solid var(--stroke);
+  background: rgba(255,255,255,.09); border: 1px solid var(--stroke);
   font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
   transition: background .2s;
 }
-.traffic-pill:hover { background: var(--sf-strong); }
-.traffic-pill .bar { width: 52px; height: 5px; border-radius: 3px; background: var(--track-bg); overflow: hidden; }
+.traffic-pill:hover { background: rgba(255,255,255,.15); }
+.traffic-pill .bar { width: 52px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.14); overflow: hidden; }
 .traffic-pill .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg,#34d399,#0a84ff); transition: width .5s cubic-bezier(.22,1,.36,1); }
 .traffic-pill.danger .bar i { background: linear-gradient(90deg,#fbbf24,#ff453a); }
 .traffic-pill.danger { color: #ffb3ae; }
 
-/* ── 侧边栏导航 ────────────────────────── */
-.sidebar {
-  flex: none; width: 188px; padding: 14px 10px;
-  background: var(--glass);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  border: 1px solid var(--stroke); border-radius: 22px;
-  box-shadow: var(--shadow-glass);
-  display: flex; flex-direction: column; gap: 4px; position: sticky; top: 90px;
-  max-height: calc(100vh - 110px); overflow-y: auto; scrollbar-width: thin;
+/* ── 分段控制 ─────────────────────────── */
+.seg {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 22px; border-radius: 18px;
+  background: rgba(255,255,255,.08); border: 1px solid var(--stroke);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  overflow-x: auto; scrollbar-width: none;
 }
-:root[data-theme="apple"] .sidebar,
-:root[data-theme="apple-dark"] .sidebar {
-  backdrop-filter: blur(28px) saturate(170%); -webkit-backdrop-filter: blur(28px) saturate(170%);
-  border: 0.5px solid rgba(0,0,0,.08);
+.seg::-webkit-scrollbar { display: none; }
+.seg button {
+  flex: 1; white-space: nowrap; padding: 9px 18px; border: none; border-radius: 14px;
+  background: transparent; color: var(--text-2); font-size: 14px; font-weight: 600;
+  font-family: inherit; cursor: pointer; transition: all .2s;
 }
-:root[data-theme="apple-dark"] .sidebar { border: 1px solid var(--stroke-strong); box-shadow: 0 16px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22); }
-.sidebar::-webkit-scrollbar { width: 6px; }
-.sidebar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
-.sb-main {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px; border-radius: 14px; cursor: pointer;
-  color: var(--text-2); font-size: 14px; font-weight: 600;
-  background: transparent; border: none; font-family: inherit; text-align: left;
-  transition: all .22s; width: 100%; user-select: none;
-}
-.sb-main:hover { background: var(--sf); color: var(--text); }
-.sb-main .ic { font-size: 17px; width: 22px; text-align: center; flex: none; }
-.sb-main .chev { margin-left: auto; font-size: 10px; opacity: .5; transition: transform .25s; }
-.sb-main.open { color: var(--text); background: var(--sf-strong); box-shadow: var(--shadow-inset-hi); }
-.sb-main.open .chev { transform: rotate(90deg); opacity: .8; }
-.sb-main.single .chev { display: none; }
-.sb-sub {
-  overflow: hidden; max-height: 0; transition: max-height .35s cubic-bezier(.22,1,.36,1);
-  display: flex; flex-direction: column; gap: 2px; padding-left: 24px;
-}
-.sb-sub.open { max-height: 400px; }
-.sb-sub button {
-  display: flex; align-items: center; gap: 9px;
-  padding: 7px 10px; border-radius: 10px; cursor: pointer;
-  color: var(--text-3); font-size: 13px; font-weight: 500;
-  background: transparent; border: none; font-family: inherit; text-align: left;
-  transition: all .18s; width: 100%; user-select: none;
-}
-.sb-sub button:hover { color: var(--text); background: var(--sf); }
-.sb-sub button.active {
-  color: var(--text); background: rgba(10,132,255,.15);
-  box-shadow: inset 2px 0 0 #0a84ff, var(--shadow-inset-hi);
-  font-weight: 600;
-}
-
-/* ── 移动端折叠 ───────────────────────── */
-@media (max-width: 760px) {
-  .layout { flex-direction: column; }
-  .sidebar {
-    position: static; width: 100%; max-height: none;
-    flex-direction: row; flex-wrap: wrap; gap: 6px;
-    padding: 10px;
-  }
-  .sb-main { padding: 7px 12px; font-size: 13px; }
-  .sb-main .chev { display: none; }
-  .sb-sub { display: none; }
+.seg button.active {
+  color: #fff; background: rgba(255,255,255,.16);
+  box-shadow: 0 4px 14px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.25);
 }
 
 /* ── 统计卡片 ─────────────────────────── */
@@ -374,7 +103,7 @@ body {
 .stat-card .label { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 7px; }
 .stat-card .value { margin-top: 8px; font-size: 27px; font-weight: 750; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .stat-card .value small { font-size: 14px; font-weight: 600; color: var(--text-2); margin-left: 3px; }
-.progress { margin-top: 12px; height: 7px; border-radius: 4px; background: var(--bar-bg); overflow: hidden; }
+.progress { margin-top: 12px; height: 7px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
 .progress i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg,#34d399,#0a84ff); transition: width .6s cubic-bezier(.22,1,.36,1); }
 .progress.hot i { background: linear-gradient(90deg,#fbbf24,#ff453a); }
 .stat-card .foot { margin-top: 8px; font-size: 12px; color: var(--text-3); }
@@ -389,7 +118,7 @@ body {
 .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; height: 100%; }
 .chart .bar { width: 100%; max-width: 34px; border-radius: 8px 8px 4px 4px;
   background: linear-gradient(180deg, rgba(103,232,249,.95), rgba(59,130,246,.55));
-  box-shadow: var(--shadow-inset-hi); transition: height .7s cubic-bezier(.22,1,.36,1); min-height: 3px; position: relative; }
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4); transition: height .7s cubic-bezier(.22,1,.36,1); min-height: 3px; position: relative; }
 .chart .bar:hover { background: linear-gradient(180deg, #67e8f9, #3b82f6); }
 .chart .bar span { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
   font-size: 11px; color: var(--text-2); opacity: 0; transition: opacity .15s; white-space: nowrap; }
@@ -400,10 +129,10 @@ body {
 .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tbl th { text-align: left; padding: 9px 10px; color: var(--text-3); font-weight: 600; font-size: 12px;
   border-bottom: 1px solid var(--stroke); white-space: nowrap; }
-.tbl td { padding: 11px 10px; border-bottom: 1px solid var(--tbl-divider); white-space: nowrap; vertical-align: middle; }
+.tbl td { padding: 11px 10px; border-bottom: 1px solid rgba(255,255,255,.06); white-space: nowrap; vertical-align: middle; }
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr { transition: background .15s; }
-.tbl tbody tr:hover { background: var(--tbl-hover); }
+.tbl tbody tr:hover { background: rgba(255,255,255,.05); }
 .tbl .num { font-variant-numeric: tabular-nums; }
 .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace; font-size: 12.5px; }
 .name-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
@@ -414,49 +143,40 @@ body {
 .ficon { width: 38px; height: 38px; border-radius: 11px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 800; letter-spacing: -.02em;
-  background: var(--sf-input); border: 1px solid var(--stroke);
-  box-shadow: var(--shadow-inset-hi); vertical-align: middle; }
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18); vertical-align: middle; }
 
 /* ── 按钮 ─────────────────────────────── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 10px 18px; border: 1px solid var(--stroke-strong); border-radius: 14px;
-  background: var(--glass-strong); color: var(--text); font-size: 13.5px; font-weight: 600; font-family: inherit;
-  cursor: pointer; transition: all .18s cubic-bezier(.22,1.2,.36,1); white-space: nowrap;
-  box-shadow: var(--shadow-btn-plain);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  padding: 9px 16px; border: 1px solid var(--stroke-strong); border-radius: 13px;
+  background: rgba(255,255,255,.1); color: #fff; font-size: 13.5px; font-weight: 600; font-family: inherit;
+  cursor: pointer; transition: all .18s; white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
 }
-.btn:hover { background: var(--btn-hover-bg); box-shadow: var(--shadow-btn-plain-hover); transform: translateY(-1px); }
-.btn:active { transform: translateY(0) scale(.97); box-shadow: var(--shadow-btn-plain); }
-.btn.primary {
-  background: linear-gradient(180deg,#4fa5ff,#0a7cff); border-color: transparent;
-  box-shadow: var(--shadow-btn-primary); color: #fff;
-}
-.btn.primary:hover { filter: brightness(1.05); box-shadow: 0 6px 18px rgba(10,124,255,.35); transform: translateY(-1px); }
-.btn.primary:active { transform: translateY(0) scale(.97); }
-.btn.danger {
-  background: var(--btn-danger-bg); border-color: var(--btn-danger-border); color: var(--btn-danger-color);
-  box-shadow: none;
-}
-.btn.danger:hover { background: var(--btn-danger-bg-hover); box-shadow: var(--shadow-btn-danger); }
-.btn.danger:active { background: var(--btn-danger-bg-active); }
-.btn.sm { padding: 7px 12px; font-size: 12.5px; border-radius: 11px; box-shadow: none; }
-.btn.sm:hover { box-shadow: var(--shadow-btn-plain-hover); }
+.btn:hover { background: rgba(255,255,255,.17); transform: translateY(-1px); }
+.btn:active { transform: scale(.96); }
+.btn.primary { background: linear-gradient(180deg,#3d9bff,#0a7cff); border-color: transparent;
+  box-shadow: 0 8px 22px rgba(10,124,255,.38), inset 0 1px 0 rgba(255,255,255,.35); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.danger { background: rgba(255,69,58,.16); border-color: rgba(255,69,58,.4); color: #ffb3ae; }
+.btn.danger:hover { background: rgba(255,69,58,.28); }
+.btn.sm { padding: 6px 12px; font-size: 12.5px; border-radius: 10px; }
 .btn[disabled] { opacity: .4; pointer-events: none; }
 
 /* ── 上传区 ───────────────────────────── */
 .dropzone {
   margin-bottom: 18px; padding: 34px 20px; text-align: center; cursor: pointer;
-  border: 1.5px dashed var(--dashed-border); border-radius: var(--radius);
-  background: var(--dropzone-bg); transition: all .2s;
+  border: 1.5px dashed rgba(255,255,255,.28); border-radius: var(--radius);
+  background: rgba(255,255,255,.045); transition: all .2s;
 }
-.dropzone:hover, .dropzone.over { background: var(--dropzone-hover-bg); border-color: var(--dashed-border-strong); transform: scale(1.005); }
+.dropzone:hover, .dropzone.over { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.5); transform: scale(1.005); }
 .dropzone .icon { font-size: 34px; margin-bottom: 10px; }
 .dropzone .t { font-size: 15px; font-weight: 650; }
 .dropzone .d { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
 .upload-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-top: 10px;
-  border-radius: 16px; background: var(--sf); border: 1px solid var(--stroke); font-size: 13.5px; }
-.upload-item .prog { flex: 1; height: 6px; border-radius: 3px; background: var(--bar-bg); overflow: hidden; }
+  border-radius: 16px; background: rgba(255,255,255,.07); border: 1px solid var(--stroke); font-size: 13.5px; }
+.upload-item .prog { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
 .upload-item .prog i { display: block; height: 100%; width: 0; border-radius: 3px;
   background: linear-gradient(90deg,#34d399,#0a84ff); transition: width .2s; }
 .upload-item .pct { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
@@ -466,44 +186,26 @@ body {
 .field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 7px; }
 .field input, .field select {
   width: 100%; padding: 12px 14px; border-radius: 14px; font-size: 15px; font-family: inherit;
-  color: var(--text); background: var(--sf-input); border: 1px solid var(--stroke-strong); outline: none;
+  color: #fff; background: rgba(255,255,255,.09); border: 1px solid var(--stroke-strong); outline: none;
   transition: border .2s, background .2s; -webkit-appearance: none; appearance: none;
 }
-.field input:focus { border-color: rgba(10,132,255,.7); background: var(--sf-input-focus); }
+.field input:focus { border-color: rgba(10,132,255,.7); background: rgba(255,255,255,.13); }
 .field input::placeholder { color: var(--text-3); }
 .field .tip { margin-top: 6px; font-size: 12px; color: var(--text-3); line-height: 1.5; }
 
 /* ── iOS 分组设置列表 ─────────────────── */
-.group {
-  border-radius: 20px; overflow: hidden; margin-bottom: 16px;
-  background: var(--glass);
-  border: 1px solid var(--stroke);
-  box-shadow: var(--shadow-glass);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-}
-:root[data-theme="apple"] .group,
-:root[data-theme="apple-dark"] .group {
-  border: 0.5px solid rgba(0,0,0,.08);
-  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-:root[data-theme="apple-dark"] .group {
-  background: linear-gradient(150deg, rgba(255,255,255,.1), rgba(255,255,255,.045));
-  border: 1px solid var(--stroke-strong);
-  box-shadow: var(--shadow-glass);
-}
+.group { border-radius: 22px; overflow: hidden; margin-bottom: 16px; }
 .group .row {
   display: flex; align-items: center; gap: 12px; padding: 14px 18px;
-  border-bottom: 1px solid var(--tbl-row-border); background: transparent;
-  transition: background .15s;
+  border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.05);
 }
 .group .row:last-child { border-bottom: none; }
-.group .row:hover { background: var(--tbl-hover); }
 .group .row .info { flex: 1; min-width: 0; }
 .group .row .info .t { font-size: 14.5px; font-weight: 600; }
 .group .row .info .d { margin-top: 3px; font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
 .group .row input[type=number], .group .row input[type=text] {
   width: 110px; padding: 9px 12px; border-radius: 12px; font-size: 14.5px; font-family: inherit;
-  color: var(--text); background: var(--sf-input); border: 1px solid var(--stroke-strong); outline: none; text-align: right;
+  color: #fff; background: rgba(255,255,255,.1); border: 1px solid var(--stroke-strong); outline: none; text-align: right;
   font-variant-numeric: tabular-nums;
 }
 .group .row input[type=number]:focus { border-color: rgba(10,132,255,.7); }
@@ -512,37 +214,27 @@ body {
 /* iOS 开关 */
 .switch { position: relative; width: 50px; height: 30px; flex: none; cursor: pointer; }
 .switch input { opacity: 0; width: 0; height: 0; }
-.switch .track { position: absolute; inset: 0; border-radius: 16px; background: var(--track-bg); transition: background .25s; }
+.switch .track { position: absolute; inset: 0; border-radius: 16px; background: rgba(255,255,255,.16); transition: background .25s; }
 .switch .thumb { position: absolute; top: 2px; left: 2px; width: 26px; height: 26px; border-radius: 50%;
-  background: #fff; box-shadow: var(--shadow-switch-thumb); transition: transform .25s cubic-bezier(.22,1.2,.36,1); }
+  background: #fff; box-shadow: 0 3px 8px rgba(0,0,0,.35); transition: transform .25s cubic-bezier(.22,1.2,.36,1); }
 .switch input:checked + .track { background: linear-gradient(180deg,#3d9bff,#0a7cff); }
 .switch input:checked + .track .thumb { transform: translateX(20px); }
 
 /* ── 模态框（底部弹层风格） ───────────── */
 .modal-mask { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-end; justify-content: center;
-  background: rgba(0,0,0,.35); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background: rgba(0,0,0,.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   animation: fadeIn .25s both; }
 @media (min-width: 640px) { .modal-mask { align-items: center; padding-bottom: 0; } }
 .modal {
   width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
   padding: 26px; border-radius: 32px 32px 0 0;
-  background: var(--glass-strong);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  border: 1px solid var(--stroke); border-bottom: none;
-  box-shadow: var(--shadow-modal);
+  background: linear-gradient(160deg, rgba(40,38,80,.92), rgba(24,22,52,.95));
+  backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke-strong); border-bottom: none;
+  box-shadow: 0 -20px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.2);
   animation: sheetUp .4s cubic-bezier(.22,1.1,.36,1) both;
 }
-@media (min-width: 640px) { .modal { border-radius: 32px; border-bottom: 1px solid var(--stroke); } }
-:root[data-theme="apple"] .modal,
-:root[data-theme="apple-dark"] .modal {
-  backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 0.5px solid rgba(0,0,0,.08);
-}
-:root[data-theme="apple-dark"] .modal { border: 1px solid var(--stroke-strong); box-shadow: 0 -20px 60px rgba(0,0,0,.5), var(--shadow-inset-hi); }
-@media (min-width: 640px) { :root[data-theme="apple-dark"] .modal { border-bottom-color: var(--stroke-strong); } }
-
-:root[data-theme="apple-dark"] .toast { border: 1px solid var(--stroke-strong); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
-
+@media (min-width: 640px) { .modal { border-radius: 32px; border-bottom: 1px solid var(--stroke-strong); } }
 @keyframes sheetUp { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal h3 { font-size: 18px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 4px; }
@@ -551,23 +243,17 @@ body {
 .modal .actions .btn { flex: 1; padding: 13px; font-size: 15px; border-radius: 16px; }
 .link-box { display: flex; gap: 8px; margin-top: 4px; }
 .link-box input { flex: 1; padding: 12px 14px; border-radius: 14px; font-size: 14px;
-  font-family: ui-monospace, "SF Mono", monospace; color: var(--text);
-  background: var(--sf-input); border: 0.5px solid rgba(0,0,0,.1); outline: none; }
+  font-family: ui-monospace, "SF Mono", monospace; color: #a5d8ff;
+  background: rgba(0,0,0,.3); border: 1px solid var(--stroke); outline: none; }
 
 /* ── Toast ────────────────────────────── */
 #toasts { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 200;
   display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast {
-  padding: 11px 22px; border-radius: 16px; font-size: 14px; font-weight: 600; color: var(--text);
-  background: var(--glass-strong);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  border: 1px solid var(--stroke); box-shadow: var(--shadow-toast);
+  padding: 11px 22px; border-radius: 16px; font-size: 14px; font-weight: 600; color: #fff;
+  background: rgba(30,28,60,.88); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--stroke-strong); box-shadow: 0 12px 32px rgba(0,0,0,.45);
   animation: toastIn .35s cubic-bezier(.22,1.2,.36,1) both; max-width: 86vw; text-align: center;
-}
-:root[data-theme="apple"] .toast,
-:root[data-theme="apple-dark"] .toast {
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  border: 0.5px solid rgba(0,0,0,.08);
 }
 .toast.ok { border-color: rgba(52,211,153,.5); }
 .toast.err { border-color: rgba(255,69,58,.55); }
@@ -591,8 +277,8 @@ body {
 .banner { display: flex; gap: 12px; align-items: flex-start; padding: 15px 18px; margin-bottom: 18px;
   border-radius: 20px; background: rgba(255,159,10,.12); border: 1px solid rgba(255,159,10,.38); }
 .banner .ic { font-size: 20px; line-height: 1.3; }
-.banner .t { font-size: 14px; font-weight: 650; color: #b45309; }
-.banner .d { margin-top: 3px; font-size: 12.5px; color: rgba(180,83,9,.7); line-height: 1.55; }
+.banner .t { font-size: 14px; font-weight: 650; color: #ffd9a0; }
+.banner .d { margin-top: 3px; font-size: 12.5px; color: rgba(255,217,160,.75); line-height: 1.55; }
 
 /* ── 登录页 ───────────────────────────── */
 #login-view { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; position: relative; z-index: 1; }
@@ -603,9 +289,9 @@ body {
 .login-card h1 { font-size: 23px; font-weight: 750; letter-spacing: -.03em; }
 .login-card .sub { margin: 8px 0 26px; font-size: 13.5px; color: var(--text-3); }
 .login-card input { width: 100%; padding: 15px 18px; border-radius: 18px; font-size: 16px; font-family: inherit;
-  color: var(--text); background: var(--sf-input); border: 1px solid var(--stroke-strong); outline: none; text-align: center;
+  color: #fff; background: rgba(255,255,255,.09); border: 1px solid var(--stroke-strong); outline: none; text-align: center;
   transition: border .2s, background .2s; }
-.login-card input:focus { border-color: rgba(10,132,255,.75); background: var(--sf-input-focus); }
+.login-card input:focus { border-color: rgba(10,132,255,.75); background: rgba(255,255,255,.13); }
 .login-card .btn { width: 100%; margin-top: 14px; padding: 15px; font-size: 16px; border-radius: 18px; }
 .login-card .err { margin-top: 12px; font-size: 13px; color: #fda293; min-height: 18px; }
 .login-card .lang-row { margin-top: 18px; }
@@ -613,7 +299,7 @@ body {
 @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-9px)} 40%,80%{transform:translateX(9px)} }
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
-.spin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--shadow-spinner-track); border-top-color: var(--text); animation: spin .8s linear infinite; margin: 30px auto; }
+.spin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid rgba(255,255,255,.18); border-top-color: #fff; animation: spin .8s linear infinite; margin: 30px auto; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .actions-cell { display: flex; gap: 6px; }
@@ -640,8 +326,7 @@ const I18N = {
     // 登录
     loginSubtitle: '管理后台 · 请输入管理密钥登录', keyPlaceholder: '管理密钥 (admin)',
     // 标签
-    tabOverview: '概览', tabFiles: '文件', tabStorage: '存储浏览', tabShares: '分享', tabDirect: '直链', tabLogs: '记录', tabBans: '封禁', tabGlobal: '全球分布', tabSecurity: '安全', tabSettings: '设置', tabWebDAV: 'WebDAV',
-    navContent: '内容管理', navAnalytics: '运营分析', navSecurity: '安全中心', navSystem: '系统设置',
+    tabOverview: '概览', tabFiles: '文件', tabShares: '分享', tabLogs: '记录', tabBans: '封禁', tabGlobal: '全球分布', tabSecurity: '安全', tabSettings: '设置',
     // 概览
     statTraffic: '本月流量', usedPercent: '已用 {n}% · 跨月自动重置', noLimit: '未设置限额',
     statDownloads: '累计下载', todayN: '今日 {n} 次', statFiles: '文件总数', storedR2: '存储于 R2 对象存储',
@@ -658,7 +343,7 @@ const I18N = {
     // 文件
     dropTitle: '拖拽文件到此处，或点击上传',
     dropDesc: '单文件最大 100 MB（Workers 请求限制）· 直传 R2 对象存储',
-    allFiles: '全部文件', noFiles: '还没有文件，上传一个试试', createShare: '创建分享', createDirect: '创建直链', del: '删除',
+    allFiles: '全部文件', noFiles: '还没有文件，上传一个试试', createShare: '创建分享', del: '删除',
     tooLarge: '「{name}」超过 100 MB 限制', uploadOk: '「{name}」上传成功', uploadFail: '「{name}」上传失败',
     uploadDone: '完成 ✅', uploadFailShort: '失败',
     // 分享弹窗
@@ -672,7 +357,7 @@ const I18N = {
     maxTip: '达到上限后链接自动失效。单 IP 重复下载限制由「设置」统一控制。',
     generate: '生成链接', shareCreated: '分享链接已创建 ✨', shareCreatedSub: '复制下面的链接发给需要的人',
     sharePageLink: '分享页（访客先看到密码/验证页）',
-    directModalTitle: '创建直链', directModalSub: '生成一个拿了就能下的直链，无密码无界面',
+    directLinkLabel: '直链（/d/xxx，跳过分享页直接下载）',
     preview: '预览分享页',
     // 分享列表
     sharesTitle: '分享链接', cleanup: '清理失效分享',
@@ -680,16 +365,6 @@ const I18N = {
     revoke: '撤销', noShares: '还没有分享链接，去「文件」页创建一个',
     confirmCleanupT: '清理失效分享', confirmCleanupD: '将删除所有已过期、已撤销、已达下载上限的分享链接。',
     cleanedN: '已清理 {n} 条失效分享', shareRevoked: '分享已撤销',
-    // 直链弹窗     // 直链弹窗 shareRevoked: '分享已撤销', 列表 列表
-    directCreated: '直链已创建 ✨', directCreatedSub: '复制下面的链接直接下载',
-    directUrlLabel: '直链（/d/xxx）',
-    directModalNotes: '备注（可选）', directModalNotesPh: '给直链起个备注名方便区分',
-    directLinksTitle: '直链', cleanupDirects: '清理失效直链',
-    stDirectActive: '有效', stDirectExpired: '已过期', stDirectRevoked: '已撤销', stDirectMaxed: '已满额',
-    revokeDirect: '撤销', noDirectLinks: '还没有直链，去「文件」页创建一个',
-    confirmCleanupDirectT: '清理失效直链', confirmCleanupDirectD: '将删除所有已过期、已撤销、已达下载上限的直链。',
-    cleanedDirectN: '已清理 {n} 条失效直链', directRevoked: '直链已撤销',
-    confirmRevokeDirectT: '撤销直链', confirmRevokeDirectD: '撤销后该链接将立即失效，无法恢复。',
     confirmRevokeT: '撤销分享', confirmRevokeD: '撤销后该链接将立即失效，无法恢复。',
     // 记录
     logsTitle: '下载记录', totalN: '共 {n} 条', searchPlaceholder: '搜索 IP / 文件名…',
@@ -856,67 +531,6 @@ const I18N = {
     oauthAddTitle: '添加 OAuth2 Provider',
     oauthLabel: '显示名称',
     oauthKeepSecret: '保持现有 Secret 不变',
-    // 存储后端（出站）
-    storageBackendTitle: '💾 存储后端',
-    storageBackendD: '默认使用 Cloudflare R2（零配置）；也可挂载外部 S3 兼容存储或任何支持 WebDAV 的网盘（坚果云 / 阿里云盘 / OneDrive / Nextcloud 等）',
-    storageBackendR2: 'Cloudflare R2（默认）',
-    storageBackendS3: 'S3 兼容存储',
-    storageBackendWebDAV: '远程 WebDAV 网盘',
-    storageBackendNotSet: '未配置',
-    storageBackendUrl: '服务器地址',
-    storageBackendUser: '用户名',
-    storageBackendPwd: '密码',
-    storageBackendPwdKeep: '留空保持不变',
-    storageBackendConfig: '配置',
-    storageBackendTest: '测试连接',
-    storageBackendConnected: '连接成功',
-    storageBackendConnectFail: '连接失败',
-    // WebDAV
-    webdavGroupTitle: '🗂️ WebDAV 文件共享',
-    webdavGroupD: '开启后可通过 WebDAV 客户端（Finder / Explorer / nPlayer 等）以读写方式管理文件，也能直接在浏览器地址栏挂载',
-    webdavEnable: '启用 WebDAV 服务',
-    webdavUsername: '用户名',
-    webdavPassword: '密码',
-    webdavPasswordPh: '留空不改动',
-    webdavPasswordSet: '已设置',
-    webdavPasswordUnset: '未设置',
-    webdavPasswordClear: '清除密码',
-    webdavRootPath: '可访问根路径',
-    webdavRootPathHelp: '默认 "/" = 全部文件；可设 "/shared" 等限制范围',
-    webdavUrl: 'WebDAV 地址',
-    webdavUrlHint: '在 WebDAV 客户端里用这个地址挂载',
-    // 数据库工具
-    dbToolsTitle: '🧰 数据库健康',
-    dbToolsD: '自动检测表、列、索引和迁移版本是否完整。旧版本升级后如果新功能缺失，点"修复"让数据库同步到最新 schema。',
-    dbHealthy: '✓ 数据库结构完整',
-    dbNeedRepair: '⚠ 检测到 schema 异常',
-    dbTables: '表结构',
-    dbColumns: '缺失的列',
-    dbIndexes: '缺失的索引',
-    dbMigration: '迁移进度',
-    dbTablesOk: '{a} / {b} 表就绪',
-    dbMissingCount: '缺 {n} 项',
-    dbRepairBtn: '🔧 修复数据库',
-    dbRepairConfirmT: '修复数据库 schema？',
-    dbRepairConfirmD: '将自动创建缺失的表、补上缺失的列和索引、重跑未执行的迁移。此操作不会删除任何现有数据。',
-    dbRepairing: '正在修复数据库…',
-    dbRepairOk: '数据库修复完成 ✅',
-    dbRepairFail: '数据库修复失败',
-    dbRepairDetailTables: '创建表',
-    dbRepairDetailCols: '补列',
-    dbRepairDetailIdx: '索引',
-    dbRepairDetailMigrations: '迁移',
-    dbRepairDetailTime: '耗时',
-    dbStatusRefresh: '刷新状态',
-    dbStatusMissingTables: '缺失的表',
-    dbStatusMissingCols: '缺失的列',
-    dbStatusMissingIdx: '缺失的索引',
-    dbTableRows: '表行数',
-    // UI 主题
-    uiThemeTitle: '🎨 界面主题',
-    uiThemeD: '白色 Apple 风格（默认）更清爽；暗色经典风格适合夜间使用。',
-    uiThemeLight: '☀️ 浅色',
-    uiThemeDark: '🌙 深色',
     confirmDeleteTitle: '确认删除',
     confirmOAuthDeleteD: '删除后此 Provider 的配置将永久删除。已生成的 OAuth2 会话不受影响，但新登录请求将无法使用此 Provider。确定删除吗？',
     custom: '自定义',
@@ -1000,8 +614,7 @@ const I18N = {
     // 登录
     loginSubtitle: 'Admin console · Enter your admin key to continue', keyPlaceholder: 'Admin key (admin)',
     // 标签
-    tabOverview: 'Overview', tabFiles: 'Files', tabStorage: 'Storage', tabShares: 'Shares', tabDirect: 'Direct', tabLogs: 'Logs', tabBans: 'Bans', tabGlobal: 'Global', tabSecurity: 'Security', tabSettings: 'Settings', tabWebDAV: 'WebDAV',
-    navContent: 'Content', navAnalytics: 'Analytics', navSecurity: 'Security', navSystem: 'System',
+    tabOverview: 'Overview', tabFiles: 'Files', tabShares: 'Shares', tabLogs: 'Logs', tabBans: 'Bans', tabGlobal: 'Global', tabSecurity: 'Security', tabSettings: 'Settings',
     // 概览
     statTraffic: 'Monthly Traffic', usedPercent: '{n}% used · resets monthly', noLimit: 'No limit set',
     statDownloads: 'Total Downloads', todayN: '{n} today', statFiles: 'Files', storedR2: 'Stored in R2 object storage',
@@ -1018,7 +631,7 @@ const I18N = {
     // 文件
     dropTitle: 'Drop files here or click to upload',
     dropDesc: 'Max 100 MB per file (Workers limit) · Stored directly in R2',
-    allFiles: 'All Files', noFiles: 'No files yet — upload one to get started', createShare: 'Share', createDirect: 'Direct', del: 'Delete',
+    allFiles: 'All Files', noFiles: 'No files yet — upload one to get started', createShare: 'Share', del: 'Delete',
     tooLarge: '"{name}" exceeds the 100 MB limit', uploadOk: '"{name}" uploaded', uploadFail: '"{name}" upload failed',
     uploadDone: 'Done ✅', uploadFailShort: 'Failed',
     // 分享弹窗
@@ -1032,7 +645,7 @@ const I18N = {
     maxTip: 'The link expires when the cap is reached. Per-IP duplicate limits are controlled in Settings.',
     generate: 'Generate Link', shareCreated: 'Share link created ✨', shareCreatedSub: 'Copy the link below and share it',
     sharePageLink: 'Share page (visitors see password/verification first)',
-    directModalTitle: 'Create Direct Link', directModalSub: 'Generate a bare link — no page, no password, just download',
+    directLinkLabel: 'Direct link (/d/xxx — skips share page)',
     preview: 'Preview',
     // 分享列表
     sharesTitle: 'Share Links', cleanup: 'Clean up expired',
@@ -1040,16 +653,6 @@ const I18N = {
     revoke: 'Revoke', noShares: 'No share links yet — create one in Files',
     confirmCleanupT: 'Clean up expired shares', confirmCleanupD: 'This will delete all expired, revoked and maxed-out share links.',
     cleanedN: 'Cleaned up {n} expired shares', shareRevoked: 'Share revoked',
-    // Direct links
-    directCreated: 'Direct link created ✨', directCreatedSub: 'Copy the link below and share it',
-    directUrlLabel: 'Direct link (/d/xxx)',
-    directModalNotes: 'Notes (optional)', directModalNotesPh: 'Label this direct link',
-    directLinksTitle: 'Direct Links', cleanupDirects: 'Clean up',
-    stDirectActive: 'Active', stDirectExpired: 'Expired', stDirectRevoked: 'Revoked', stDirectMaxed: 'Maxed',
-    revokeDirect: 'Revoke', noDirectLinks: 'No direct links yet — go to Files and create one',
-    confirmCleanupDirectT: 'Clean up expired direct links', confirmCleanupDirectD: 'Delete all expired, revoked and maxed-out direct links.',
-    cleanedDirectN: 'Cleaned {n} expired direct links', directRevoked: 'Direct link revoked',
-    confirmRevokeDirectT: 'Revoke direct link', confirmRevokeDirectD: 'This direct link will be permanently disabled.',
     confirmRevokeT: 'Revoke share', confirmRevokeD: 'The link will stop working immediately. This cannot be undone.',
     // 记录
     logsTitle: 'Download Logs', totalN: '{n} total', searchPlaceholder: 'Search IP / file name…',
@@ -1215,67 +818,6 @@ const I18N = {
     oauthAddTitle: 'Add OAuth2 Provider',
     oauthLabel: 'Display Name',
     oauthKeepSecret: 'Keep existing secret unchanged',
-    // Storage backend (outbound)
-    storageBackendTitle: '💾 Storage Backend',
-    storageBackendD: 'Cloudflare R2 by default (zero config). Optionally mount an external S3-compatible store or any WebDAV cloud drive (Jianguoyun / Aliyun Drive / OneDrive / Nextcloud…)',
-    storageBackendR2: 'Cloudflare R2 (default)',
-    storageBackendS3: 'S3-compatible storage',
-    storageBackendWebDAV: 'Remote WebDAV cloud',
-    storageBackendNotSet: 'Not configured',
-    storageBackendUrl: 'Server URL',
-    storageBackendUser: 'Username',
-    storageBackendPwd: 'Password',
-    storageBackendPwdKeep: 'Leave blank to keep unchanged',
-    storageBackendConfig: 'Configure',
-    storageBackendTest: 'Test connection',
-    storageBackendConnected: 'Connected',
-    storageBackendConnectFail: 'Connection failed',
-    // WebDAV
-    webdavGroupTitle: '🗂️ WebDAV File Sharing',
-    webdavGroupD: 'Enable to mount your storage as a read-write drive from WebDAV clients (Finder / Explorer / nPlayer), or directly via the browser address bar.',
-    webdavEnable: 'Enable WebDAV',
-    webdavUsername: 'Username',
-    webdavPassword: 'Password',
-    webdavPasswordPh: 'Leave blank to keep unchanged',
-    webdavPasswordSet: 'Set',
-    webdavPasswordUnset: 'Not set',
-    webdavPasswordClear: 'Clear password',
-    webdavRootPath: 'Accessible root path',
-    webdavRootPathHelp: 'Default "/" = all files; set "/shared" to restrict scope',
-    webdavUrl: 'WebDAV URL',
-    webdavUrlHint: 'Use this URL in your WebDAV client to mount',
-    // Database tools
-    dbToolsTitle: '🧰 Database Health',
-    dbToolsD: 'Auto-check whether tables, columns, indexes and migrations are complete. After an upgrade from an older version, click "Repair" to sync the DB to the latest schema.',
-    dbHealthy: '✓ Schema is complete',
-    dbNeedRepair: '⚠ Schema issue detected',
-    dbTables: 'Tables',
-    dbColumns: 'Missing columns',
-    dbIndexes: 'Missing indexes',
-    dbMigration: 'Migration progress',
-    dbTablesOk: '{a} / {b} tables ready',
-    dbMissingCount: '{n} missing',
-    dbRepairBtn: '🔧 Repair Database',
-    dbRepairConfirmT: 'Repair database schema?',
-    dbRepairConfirmD: 'This will create missing tables, add missing columns/indexes and re-run pending migrations. No existing data will be deleted.',
-    dbRepairing: 'Repairing database…',
-    dbRepairOk: 'Database repair complete ✅',
-    dbRepairFail: 'Database repair failed',
-    dbRepairDetailTables: 'Tables created',
-    dbRepairDetailCols: 'Columns added',
-    dbRepairDetailIdx: 'Indexes',
-    dbRepairDetailMigrations: 'Migrations',
-    dbRepairDetailTime: 'Duration',
-    dbStatusRefresh: 'Refresh status',
-    dbStatusMissingTables: 'Missing tables',
-    dbStatusMissingCols: 'Missing columns',
-    dbStatusMissingIdx: 'Missing indexes',
-    dbTableRows: 'Row counts',
-    // UI theme
-    uiThemeTitle: '🎨 UI Theme',
-    uiThemeD: 'Light Apple style (default) for clarity; dark classic style for night use.',
-    uiThemeLight: '☀️ Light',
-    uiThemeDark: '🌙 Dark',
     confirmDeleteTitle: 'Confirm Delete',
     confirmOAuthDeleteD: 'This provider config will be permanently deleted. Existing OAuth sessions remain valid, but new login requests cannot use this provider. Are you sure?',
     custom: 'Custom',
@@ -1588,38 +1130,8 @@ function renderLoginCard(bodyHtml){
   </div>`;
 }
 
-/* ═══════════ 侧边栏导航配置 ═══════════ */
-const NAV_GROUPS = [
-  { key: 'overview', ic: '📊', label: () => t('tabOverview'), tab: 'overview' },
-  { key: 'content', ic: '📦', label: () => t('navContent'), subs: [
-      { tab: 'files',   label: () => t('tabFiles'),   ic: '📁' },
-      { tab: 'storage', label: () => t('tabStorage'), ic: '🗄️' },
-      { tab: 'shares',  label: () => t('tabShares'),  ic: '🔗' },
-      { tab: 'direct',  label: () => t('tabDirect'),  ic: '⚡' },
-    ]},
-  { key: 'analytics', ic: '📈', label: () => t('navAnalytics'), subs: [
-      { tab: 'logs',   label: () => t('tabLogs'),   ic: '📋' },
-      { tab: 'global', label: () => t('tabGlobal'), ic: '🌍' },
-    ]},
-  { key: 'security', ic: '🛡️', label: () => t('navSecurity'), subs: [
-      { tab: 'bans',    label: () => t('tabBans'),    ic: '🚫' },
-      { tab: 'security',label: () => t('tabSecurity'),ic: '🔒' },
-    ]},
-  { key: 'system', ic: '⚙️', label: () => t('navSystem'), subs: [
-      { tab: 'codes',    label: () => t('tabCodes'),    ic: '🎟️' },
-      { tab: 'webdav',   label: () => t('tabWebDAV'),  ic: '🗂️' },
-      { tab: 'settings', label: () => t('tabSettings'), ic: '⚙️' },
-    ]},
-];
-const TAB_TO_GROUP = {};
-NAV_GROUPS.forEach(g => {
-  if (g.tab) TAB_TO_GROUP[g.tab] = g.key;
-  if (g.subs) g.subs.forEach(s => TAB_TO_GROUP[s.tab] = g.key);
-});
-
 /* ═══════════ 主应用 ═══════════ */
 let currentTab = 'overview';
-let openGroup = 'overview'; // 当前展开的侧边栏分组
 let logsPage = 1, logsQuery = '';
 
 async function showApp(){
@@ -1627,39 +1139,8 @@ async function showApp(){
   try{
     const s = await api('/api/admin/session');
     siteTitle = s.site_title || siteTitle;
-    // 隐藏路由：访问 /admin/apple 强制 Apple 玻璃风格（暗色紫蓝渐变）
-    const path = location.pathname;
-    if (/\/admin\/apple(\/|$)/.test(path)) {
-      document.documentElement.dataset.theme = 'apple-dark';
-    } else {
-      // 根据后端偏好设置主题（默认 dark）
-      document.documentElement.dataset.theme = s.ui_theme === 'light' ? 'light' : 'dark';
-    }
-  }catch{
-    // 兜底
-    document.documentElement.dataset.theme = location.pathname.includes('/admin/apple') ? 'apple-dark' : 'dark';
-  }
+  }catch{}
   document.title = t('docTitle', {site: siteTitle});
-
-  // 渲染侧边栏
-  const sidebarHtml = NAV_GROUPS.map(g => {
-    const isSingle = !g.subs;
-    const active = (isSingle && currentTab === g.tab) || TAB_TO_GROUP[currentTab] === g.key;
-    const subHtml = g.subs ? `
-      <div class="sb-sub ${active ? 'open' : ''}" data-sub="${g.key}">
-        ${g.subs.map(s => `
-          <button data-tab="${s.tab}" class="${currentTab === s.tab ? 'active' : ''}">
-            <span class="ic">${s.ic}</span>${esc(s.label())}
-          </button>`).join('')}
-      </div>` : '';
-    return `
-      <button class="sb-main ${active ? 'open' : ''} ${isSingle ? 'single' : ''}" data-group="${g.key}" data-tab="${g.tab || ''}">
-        <span class="ic">${g.ic}</span>${esc(g.label())}
-        ${g.subs ? '<span class="chev">▶</span>' : ''}
-      </button>
-      ${subHtml}`;
-  }).join('');
-
   $('#app').innerHTML = `
   <div class="wrap">
     <div class="topbar">
@@ -1670,83 +1151,35 @@ async function showApp(){
         <span class="bar"><i id="pill-bar" style="width:0%"></i></span>
         <span id="pill-text">— / —</span>
       </div>
-      <button class="btn sm" id="theme-toggle" title="🌙 / ☀️" style="font-size:16px;padding:9px 11px;line-height:1">${document.documentElement.dataset.theme === 'light' ? '🌙' : '☀️'}</button>
       <button class="btn sm" id="lang-btn">${esc(t('switchTo'))}</button>
       <button class="btn sm" id="logout-btn">${esc(t('logout'))}</button>
     </div>
-    <div class="layout">
-      <nav class="sidebar" id="sidebar">${sidebarHtml}</nav>
-      <div id="view"></div>
+    <div class="seg" id="tabs">
+      <button data-tab="overview" class="active">${esc(t('tabOverview'))}</button>
+      <button data-tab="files">${esc(t('tabFiles'))}</button>
+      <button data-tab="shares">${esc(t('tabShares'))}</button>
+      <button data-tab="logs">${esc(t('tabLogs'))}</button>
+      <button data-tab="bans">${esc(t('tabBans'))}</button>
+      <button data-tab="global">${esc(t('tabGlobal'))}</button>
+      <button data-tab="codes">${esc(t('tabCodes'))}</button>
+      <button data-tab="security">${esc(t('tabSecurity'))}</button>
+      <button data-tab="settings">${esc(t('tabSettings'))}</button>
     </div>
+    <div id="view"></div>
   </div>`;
-
-  // 绑定侧边栏事件
-  $('#sidebar').addEventListener('click', e => {
-    const main = e.target.closest('.sb-main');
-    if (main) {
-      const gKey = main.dataset.group;
-      const tab = main.dataset.tab;
-      if (tab) {
-        // 叶子节点（如 overview）：直接切换
-        switchTab(tab);
-      } else {
-        // 有子菜单的：切换展开/收起
-        const sub = $('#sidebar .sb-sub[data-sub="' + gKey + '"]');
-        main.classList.toggle('open');
-        sub?.classList.toggle('open');
-        openGroup = main.classList.contains('open') ? gKey : null;
-      }
-      return;
-    }
-    const subBtn = e.target.closest('.sb-sub button[data-tab]');
-    if (subBtn) switchTab(subBtn.dataset.tab);
-  });
-
+  $$('#tabs button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
   $('#logout-btn').onclick = async () => { await api('/api/admin/logout', {method:'POST'}); showLogin(); };
   $('#traffic-pill').onclick = () => switchTab('settings');
   $('#lang-btn').onclick = toggleLang;
-  $('#theme-toggle').onclick = async () => {
-    // Apple 主题下（隐藏路由）不允许切换
-    const currentTheme = document.documentElement.dataset.theme;
-    if (currentTheme === 'apple' || currentTheme === 'apple-dark') return;
-    const next = currentTheme === 'light' ? 'dark' : 'light';
-    document.documentElement.dataset.theme = next;
-    $('#theme-toggle').textContent = next === 'light' ? '🌙' : '☀️';
-    try { await api('/api/admin/settings', { method:'PUT', body: JSON.stringify({ ui_theme: next }) }); } catch {}
-  };
   switchTab('overview');
 }
 
-/* Tab → loadXxx 函数映射 */
-const TAB_LOADERS = {
-  overview: loadOverview, files: loadFiles, storage: loadStorage, shares: loadShares,
-  direct: loadDirectLinks, logs: loadLogs, bans: loadBans,
-  global: loadGlobal, codes: loadCodes, security: loadSecurity, webdav: loadWebDAV, settings: loadSettings,
-};
-
 function switchTab(tab){
   currentTab = tab;
-  openGroup = TAB_TO_GROUP[tab] || tab;
-  // 更新侧边栏高亮 & 展开
-  const sidebar = $('#sidebar');
-  if (sidebar) {
-    sidebar.querySelectorAll('.sb-main').forEach(m => {
-      const gKey = m.dataset.group;
-      const g = NAV_GROUPS.find(g => g.key === gKey);
-      const isSingle = !g.subs;
-      const isActive = (isSingle && g.tab === tab) || TAB_TO_GROUP[tab] === gKey;
-      m.classList.toggle('open', isActive);
-      m.classList.toggle('active', isActive && isSingle);
-      const sub = sidebar.querySelector('.sb-sub[data-sub="' + gKey + '"]');
-      if (sub) sub.classList.toggle('open', isActive);
-    });
-    sidebar.querySelectorAll('.sb-sub button[data-tab]').forEach(b =>
-      b.classList.toggle('active', b.dataset.tab === tab)
-    );
-  }
+  $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   const v = $('#view');
   v.innerHTML = '<div class="spin"></div>';
-  (TAB_LOADERS[tab] || (() => Promise.resolve()))().catch(e => {
+  ({ overview: loadOverview, files: loadFiles, shares: loadShares, logs: loadLogs, bans: loadBans, global: loadGlobal, codes: loadCodes, security: loadSecurity, settings: loadSettings })[tab]().catch(e => {
     v.innerHTML = `<div class="glass section"><div class="empty"><div class="icon">⚠️</div>${esc(e.message === 'unauthorized' ? t('loadingErr') : e.message)}</div></div>`;
   });
 }
@@ -1854,7 +1287,6 @@ async function loadFiles(){
             <td class="num">${fmtTime(f.uploaded_at)}</td>
             <td><div class="actions-cell">
               <button class="btn sm primary" data-share="${f.id}">${esc(t('createShare'))}</button>
-              <button class="btn sm" data-direct="${f.id}" style="background:rgba(250,204,21,0.15);border-color:rgba(250,204,21,0.35);color:#fde68a">${esc(t('createDirect'))}</button>
               <button class="btn sm danger" data-del="${f.id}" data-name="${esc(f.name)}">${esc(t('del'))}</button>
             </div></td>
           </tr>`).join('')}
@@ -1870,7 +1302,6 @@ async function loadFiles(){
   fi.onchange = () => { uploadFiles([...fi.files]); fi.value = ''; };
 
   $$('[data-share]').forEach(b => b.onclick = () => openShareModal(b.dataset.share));
-  $$('[data-direct]').forEach(b => b.onclick = () => openDirectModal(b.dataset.direct));
   $$('[data-del]').forEach(b => b.onclick = async () => {
     if(!(await confirmDialog(t('deleteFileT'), t('deleteFileD', {name: b.dataset.name})))) return;
     await api(`/api/admin/files/${b.dataset.del}`, { method:'DELETE' });
@@ -1912,7 +1343,7 @@ function openShareModal(fileId){
     <div class="sub">${esc(t('shareModalSub'))}</div>
     <div class="field">
       <label>${esc(t('validity'))}</label>
-      <select id="sh-exp" style="width:100%;padding:12px 14px;border-radius:14px;font-size:15px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+      <select id="sh-exp" style="width:100%;padding:12px 14px;border-radius:14px;font-size:15px;font-family:inherit;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
         <option value="0" style="color:#111">${esc(t('perm'))}</option>
         <option value="1" style="color:#111">${esc(t('h1'))}</option>
         <option value="24" style="color:#111">${esc(t('d1'))}</option>
@@ -1948,6 +1379,7 @@ function openShareModal(fileId){
     try{
       const r = await api('/api/admin/shares', { method:'POST', body: JSON.stringify({ file_id: fileId, expires_hours: exp, max_downloads: max, password, download_name }) });
       const url = location.origin + r.url;
+      const directUrl = location.origin + r.direct_url;
       openModal(`
         <h3>${esc(t('shareCreated'))}</h3>
         <div class="sub">${esc(t('shareCreatedSub'))}</div>
@@ -1959,7 +1391,13 @@ function openShareModal(fileId){
               <button class="btn primary" data-copy="${esc(url)}">${esc(t('copy'))}</button>
             </div>
           </div>
-
+          <div>
+            <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px">${esc(t('directLinkLabel'))}</div>
+            <div class="link-box">
+              <input readonly value="${esc(directUrl)}" onclick="this.select()">
+              <button class="btn primary" data-copy="${esc(directUrl)}">${esc(t('copy'))}</button>
+            </div>
+          </div>
         </div>
         <div class="actions">
           <button class="btn" data-x>${esc(t('close'))}</button>
@@ -1970,230 +1408,6 @@ function openShareModal(fileId){
       $('#sh-open').onclick = () => window.open(r.url, '_blank');
     }catch(e){ toast(e.message, 'err'); }
   };
-}
-
-
-/* ═══════════ 创建直链弹窗 ═══════════ */
-function openDirectModal(fileId){
-  openModal(`
-    <h3>${esc(t('directModalTitle'))}</h3>
-    <div class="sub">${esc(t('directModalSub'))}</div>
-    <div class="field">
-      <label>${esc(t('validity'))}</label>
-      <select id="dl-exp" style="width:100%;padding:12px 14px;border-radius:14px;font-size:15px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
-        <option value="0" style="color:#111">${esc(t('perm'))}</option>
-        <option value="1" style="color:#111">${esc(t('h1'))}</option>
-        <option value="24" style="color:#111">${esc(t('d1'))}</option>
-        <option value="168" style="color:#111">${esc(t('d7'))}</option>
-        <option value="720" style="color:#111">${esc(t('d30'))}</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>${esc(t('maxDownloadsLabel'))}</label>
-      <input type="number" id="dl-max" min="0" placeholder="${esc(t('unlimitedPlaceholder'))}">
-      <div class="tip">${esc(t('maxTip'))}</div>
-    </div>
-    <div class="field">
-      <label>${esc(t('downloadName'))}</label>
-      <input type="text" id="dl-dlname" placeholder="${esc(t('downloadNamePh'))}">
-      <div class="tip">${esc(t('downloadNameHint'))}</div>
-    </div>
-    <div class="field">
-      <label>${esc(t('directModalNotes'))}</label>
-      <input type="text" id="dl-notes" placeholder="${esc(t('directModalNotesPh'))}">
-    </div>
-    <div class="actions">
-      <button class="btn" data-x>${esc(t('cancel'))}</button>
-      <button class="btn primary" id="dl-create">${esc(t('generate'))}</button>
-    </div>`);
-  $('[data-x]').onclick = closeModal;
-  $('#dl-create').onclick = async () => {
-    const exp = Number($('#dl-exp').value) || null;
-    const max = Number($('#dl-max').value) || null;
-    const download_name = $('#dl-dlname').value.trim() || null;
-    const notes = $('#dl-notes').value.trim() || null;
-    try{
-      const r = await api('/api/admin/direct-links', { method:'POST', body: JSON.stringify({ file_id: fileId, expires_hours: exp, max_downloads: max, download_name, notes }) });
-      const url = location.origin + r.url;
-      openModal(`
-        <h3>${esc(t('directCreated'))}</h3>
-        <div class="sub">${esc(t('directCreatedSub'))}</div>
-        <div style="display:flex;flex-direction:column;gap:14px">
-          <div>
-            <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px">${esc(t('directUrlLabel'))}</div>
-            <div class="link-box">
-              <input readonly value="${esc(url)}" onclick="this.select()">
-              <button class="btn primary" data-copy="${esc(url)}">${esc(t('copy'))}</button>
-            </div>
-          </div>
-        </div>
-        <div class="actions">
-          <button class="btn" data-x>${esc(t('close'))}</button>
-          <button class="btn primary" id="dl-open">${esc(t('preview'))}</button>
-        </div>`);
-      document.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copyText(b.dataset.copy));
-      $('[data-x]').onclick = closeModal;
-      $('#dl-open').onclick = () => window.open(r.url, '_blank');
-    }catch(e){ toast(e.message, 'err'); }
-  };
-}
-
-/* ═══════════ 存储浏览（S3 / R2） ═══════════ */
-let _stgPrefix = '';
-let _stgMarker = undefined;
-async function loadStorage(){
-  const isZh = LANG === "zh";
-  const getView = () => document.getElementById('view');
-
-  function breadcrumbs(prefix){
-    const parts = prefix ? prefix.split('/').filter(Boolean) : [];
-    const arr = [{ name: isZh ? '根目录' : 'Root', prefix: '' }];
-    let acc = '';
-    for (const p of parts){
-      acc += p + '/';
-      arr.push({ name: p, prefix: acc });
-    }
-    return arr;
-  }
-
-  async function render(){
-    const view = getView();
-    if (!view) return;
-    view.innerHTML = `<div class="spin"></div>`;
-    try{
-      const url = `/api/admin/storage/objects?prefix=${encodeURIComponent(_stgPrefix || '')}${_stgMarker ? '&marker=' + encodeURIComponent(_stgMarker) : ''}&limit=100`;
-      const r = await api(url);
-      const kind = r.kind === 'r2' ? 'R2' : r.kind === 'webdav' ? 'WebDAV' : 'S3';
-      const bc = breadcrumbs(_stgPrefix);
-
-      const bcHtml = bc.map((part, i) => {
-        const isLast = i === bc.length - 1;
-        const label = esc(part.name);
-        if (isLast) return `<span style="font-family:ui-monospace,monospace">${label}</span>`;
-        return `<a href="javascript:void(0)" data-prefix="${esc(part.prefix)}" class="stg-bc" style="color:var(--blue);text-decoration:none;font-family:ui-monospace,monospace">${label}</a>`;
-      }).join('<span style="opacity:.35;margin:0 6px">/</span>');
-
-      const rows = [...(r.entries ?? [])].sort((a,b)=>{
-        if(a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      let html2 = `
-        <div class="glass group" style="padding:18px 22px">
-          <div class="row" style="gap:12px;flex-wrap:wrap">
-            <div style="flex:1;min-width:260px">
-              <div style="font-size:13px;opacity:.6;margin-bottom:4px">${isZh ? '当前路径' : 'Current path'}</div>
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span style="opacity:.5">${kind}</span>
-                <span style="opacity:.35">·</span>
-                ${bcHtml}
-              </div>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button class="btn sm" id="stg-refresh">🔄 ${isZh?'刷新':'Refresh'}</button>
-              <button class="btn sm danger" id="stg-delete-sel">🗑️ ${isZh ? '删除选中' : 'Delete Selected'}</button>
-            </div>
-          </div>
-        </div>
-        <div class="glass group" style="padding:0;overflow:auto">
-          <table class="tbl" style="margin:0">
-            <thead><tr>
-              <th style="width:36px"><input type="checkbox" id="stg-check-all"></th>
-              <th>${esc(t('colName'))}</th>
-              <th style="width:120px">${esc(t('colSize'))}</th>
-              <th style="width:170px">${esc(t('colTime'))}</th>
-              <th style="width:140px">${esc(t('colActions'))}</th>
-            </tr></thead>
-            <tbody id="stg-tbody">
-      `;
-      if (rows.length === 0){
-        html2 += `<tr><td colspan="5" style="text-align:center;padding:48px;opacity:.6">${isZh ? '此目录为空' : 'This directory is empty'}</td></tr>`;
-      } else {
-        html2 += rows.map(e => {
-          const rowKey = esc(e.key);
-          if (e.isDir){
-            return `<tr data-key="${rowKey}">
-              <td></td>
-              <td><a href="javascript:void(0)" class="stg-dir" data-prefix="${esc(e.key)}" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:8px">📁 <strong>${esc(e.name.replace(/\/$/, ''))}</strong></a></td>
-              <td style="opacity:.35">—</td>
-              <td style="opacity:.35">—</td>
-              <td></td>
-            </tr>`;
-          }
-          const icon = ficon(e.name);
-          return `<tr data-key="${rowKey}">
-            <td><input type="checkbox" class="stg-chk"></td>
-            <td style="display:flex;align-items:center;gap:10px">${icon}<span style="font-family:ui-monospace,monospace">${esc(e.name)}</span></td>
-            <td class="num">${fmtSize(e.size)}</td>
-            <td class="num" style="white-space:nowrap">${e.lastModified ? fmtTime(e.lastModified) : '—'}</td>
-            <td style="white-space:nowrap">
-              <button class="btn sm" data-copy-key="${rowKey}">${isZh ? '复制Key' : 'Copy Key'}</button>
-            </td>
-          </tr>`;
-        }).join('');
-      }
-      html2 += `</tbody></table>
-        </div>
-        ${r.truncated ? `<div style="text-align:center;padding:14px"><button class="btn" id="stg-load-more">${isZh ? '加载更多…' : 'Load more…'}</button></div>` : ''}
-      `;
-      const v2 = getView();
-      if (v2) v2.innerHTML = html2;
-
-      // ── 事件绑定（只绑一次成功渲染后） ──
-      document.getElementById('stg-refresh')?.addEventListener('click', () => { _stgMarker = undefined; render(); });
-      document.getElementById('stg-load-more')?.addEventListener('click', () => { render(); });
-
-      document.querySelectorAll('.stg-bc').forEach(a => {
-        a.addEventListener('click', () => {
-          _stgPrefix = a.dataset.prefix || '';
-          _stgMarker = undefined;
-          render();
-        });
-      });
-
-      document.querySelectorAll('.stg-dir').forEach(a => {
-        a.addEventListener('click', () => {
-          _stgPrefix = a.dataset.prefix || '';
-          _stgMarker = undefined;
-          render();
-        });
-      });
-
-      document.querySelectorAll('[data-copy-key]').forEach(b => {
-        b.addEventListener('click', () => copyText(b.dataset.copyKey));
-      });
-
-      const checkAll = document.getElementById('stg-check-all');
-      if (checkAll){
-        checkAll.addEventListener('change', () => {
-          document.querySelectorAll('.stg-chk').forEach(c => c.checked = checkAll.checked);
-        });
-      }
-
-      document.getElementById('stg-delete-sel')?.addEventListener('click', async () => {
-        const keys = [...document.querySelectorAll('.stg-chk:checked')].map(c => c.closest('tr')?.dataset.key).filter(Boolean);
-        if (keys.length === 0){ toast(isZh ? '请先选择要删除的对象' : 'Select at least one object first', 'err'); return; }
-        if (!(await confirmDialog(
-          isZh ? `删除 ${keys.length} 个对象？` : `Delete ${keys.length} objects?`,
-          isZh ? '此操作会直接从存储中删除对象，数据库文件记录不受影响。不可恢复。' : 'This removes objects directly from storage. DB file records are not affected. Cannot be undone.',
-          true
-        ))) return;
-        try{
-          const r2 = await api('/api/admin/storage/objects', { method:'DELETE', body: JSON.stringify({ keys }) });
-          toast((isZh ? '已删除 {n} 个对象' : 'Deleted {n} objects').replace('{n}', r2.deleted));
-          _stgMarker = undefined;
-          render();
-        }catch(e2){ toast(e2.message, 'err'); }
-      });
-    }catch(e){
-      const v3 = getView();
-      if (v3) v3.innerHTML = `<div class="glass group" style="padding:32px;text-align:center;opacity:.85">
-        <div style="font-size:18px;font-weight:600;margin-bottom:8px">${isZh ? '存储浏览暂不可用' : 'Storage browser unavailable'}</div>
-        <div style="font-size:13px;opacity:.7">${esc(e.message || e)}</div>
-      </div>`;
-    }
-  }
-  render();
 }
 
 /* ═══════════ 分享 ═══════════ */
@@ -2212,7 +1426,7 @@ async function loadShares(){
           return `
           <tr>
             <td class="name-cell">${ficon(s.file_name)} ${esc(s.file_name)}${s.download_name && s.download_name !== s.file_name ? `<div style="font-size:11px;color:#6ee7b7;margin-top:2px">↳ ${esc(s.download_name)}</div>` : ''}</td>
-            <td class="mono">${s.has_password?'🔒 ':''}<a href="/s/${s.id}" target="_blank" style="color:var(--blue);text-decoration:none">/s/${s.id}</a></td>
+            <td class="mono">${s.has_password?'🔒 ':''}<a href="/s/${s.id}" target="_blank" style="color:#a5d8ff;text-decoration:none">/s/${s.id}</a><br><span style="font-size:10px;color:rgba(255,255,255,.45)">直链 </span><a href="${s.direct_url}" target="_blank" data-direct="${location.origin}${s.direct_url}" style="color:#fde68a;text-decoration:none;font-size:11px">${s.direct_url}</a><button class="btn sm" data-cdirect="${location.origin}${s.direct_url}" style="padding:1px 6px;font-size:10px;margin-left:2px">📋</button></td>
             <td class="mono">${pw ? `<span id="pw-${s.id}" style="font-family:ui-monospace,'SF Mono',monospace;color:#fde68a">••••••</span>
               <button class="btn sm" data-pw="${s.id}" data-val="${esc(pw)}" style="padding:2px 8px;font-size:11px;margin-left:4px">👁</button>
               <button class="btn sm" data-cpw="${esc(pw)}" style="padding:2px 8px;font-size:11px">📋</button>` : `<span style="color:var(--text-3)">—</span>`}</td>
@@ -2271,7 +1485,7 @@ async function loadLogs(){
       <div class="section-title"><h2>📜 ${esc(t('logsTitle'))}（${esc(t('totalN',{n:d.total}))}）</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="log-q" placeholder="${esc(t('searchPlaceholder'))}" value="${esc(logsQuery)}"
-            style="padding:8px 14px;border-radius:12px;font-size:13px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;width:180px">
+            style="padding:8px 14px;border-radius:12px;font-size:13px;font-family:inherit;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none;width:180px">
           <button class="btn sm" id="clear-30">${esc(t('clear30'))}</button>
           <button class="btn sm danger" id="clear-all">${esc(t('clearAll'))}</button>
         </div>
@@ -2313,53 +1527,6 @@ async function loadLogs(){
   };
 }
 
-/* ═══════════ 直链 ═══════════ */
-async function loadDirectLinks(){
-  const { direct_links } = await api('/api/admin/direct-links');
-  const STATUS_KEY = { active:'stDirectActive', expired:'stDirectExpired', revoked:'stDirectRevoked', maxed:'stDirectMaxed' };
-  $('#view').innerHTML = `
-    <div class="glass section">
-      <div class="section-title"><h2>🔗 ${esc(t('directLinksTitle'))}（${direct_links.length}）</h2>
-        <button class="btn sm" id="cleanup-directs">${esc(t('cleanupDirects'))}</button></div>
-      ${direct_links.length ? `
-      <div style="overflow-x:auto"><table class="tbl">
-        <thead><tr>
-          <th>${esc(t('colFile'))}</th><th>${esc(t('colLink'))}</th>
-          <th>备注</th>
-          <th>${esc(t('colDownloads'))} / ${esc(t('colExpires'))}</th>
-          <th>${esc(t('colCreated'))}</th><th>${esc(t('colStatus'))}</th>
-          <th style="width:80px">${esc(t('colActions'))}</th>
-        </tr></thead>
-        <tbody>${direct_links.map(d => `
-          <tr>
-            <td class="name-cell">${ficon(d.file_name)} ${esc(d.file_name)}${d.download_name && d.download_name !== d.file_name ? `<div style="font-size:11px;color:#6ee7b7;margin-top:2px">↳ ${esc(d.download_name)}</div>` : ''}</td>
-            <td class="mono"><a href="/d/${d.id}" target="_blank" style="color:#fde68a;text-decoration:none">/d/${d.id}</a>
-              <button class="btn sm" data-cdl="${location.origin}/d/${d.id}" style="padding:1px 6px;font-size:10px;margin-left:4px">📋</button></td>
-            <td>${d.notes ? esc(d.notes) : '<span style="color:var(--text-3)">—</span>'}</td>
-            <td class="num">${d.download_count} / ${d.max_downloads ?? '∞'}</td>
-            <td class="num">${fmtTime(d.created_at)}</td>
-            <td><span class="tag ${d.status}"><i></i>${esc(t(STATUS_KEY[d.status]))}</span></td>
-            <td><button class="btn sm danger" data-rvdl="${d.id}">${esc(t('revokeDirect'))}</button></td>
-          </tr>`).join('')}
-        </tbody>
-      </table></div>` : `<div class="empty"><div class="icon">🔗</div>${esc(t('noDirectLinks'))}</div>`}
-    </div>`;
-  $('#cleanup-directs').onclick = async () => {
-    if(!(await confirmDialog(t('confirmCleanupDirectT'), t('confirmCleanupDirectD'), false))) return;
-    const r = await api('/api/admin/direct-links/cleanup', { method:'POST' });
-    toast(t('cleanedDirectN', {n: r.deleted}));
-    loadDirectLinks();
-  };
-  document.querySelectorAll('[data-cdl]').forEach(b => b.onclick = () => copyText(b.dataset.cdl));
-  $$('[data-rvdl]').forEach(b => b.onclick = async () => {
-    if(!(await confirmDialog(t('confirmRevokeDirectT'), t('confirmRevokeDirectD')))) return;
-    await api(`/api/admin/direct-links/${b.dataset.rvdl}`, { method:'DELETE' });
-    toast(t('directRevoked'));
-    loadDirectLinks();
-  });
-}
-
-
 /* ═══════════ 封禁 ═══════════ */
 async function loadBans(){
   const { bans } = await api('/api/admin/bans');
@@ -2368,9 +1535,9 @@ async function loadBans(){
       <div class="section-title"><h2>⛔ ${esc(t('manualBan'))}</h2></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <input id="ban-ip" placeholder="${esc(t('ipPlaceholder'))}" class="mono"
-          style="flex:1;min-width:160px;padding:11px 14px;border-radius:14px;font-size:14px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+          style="flex:1;min-width:160px;padding:11px 14px;border-radius:14px;font-size:14px;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
         <input id="ban-reason" placeholder="${esc(t('reasonPlaceholder'))}"
-          style="flex:1;min-width:160px;padding:11px 14px;border-radius:14px;font-size:14px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+          style="flex:1;min-width:160px;padding:11px 14px;border-radius:14px;font-size:14px;font-family:inherit;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
         <button class="btn primary" id="ban-add">${esc(t('ban'))}</button>
       </div>
       <div class="field" style="margin:12px 0 0"><div class="tip">${esc(t('banTip'))}</div></div>
@@ -2430,18 +1597,18 @@ async function loadSecurity(){
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <select id="sec-action" style="padding:8px 12px;border-radius:12px;font-size:13px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+        <select id="sec-action" style="padding:8px 12px;border-radius:12px;font-size:13px;font-family:inherit;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
           <option value="" style="color:#111">${esc(t('secActionAll'))}</option>
           <option value="login" style="color:#111">${esc(t('actionLogin'))}</option>
           <option value="logout" style="color:#111">${esc(t('actionLogout'))}</option>
         </select>
-        <select id="sec-result" style="padding:8px 12px;border-radius:12px;font-size:13px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+        <select id="sec-result" style="padding:8px 12px;border-radius:12px;font-size:13px;font-family:inherit;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
           <option value="" style="color:#111">${esc(t('secFilterAll'))}</option>
           <option value="success" style="color:#111">${esc(t('secFilterSuccess'))}</option>
           <option value="fail" style="color:#111">${esc(t('secFilterFail'))}</option>
         </select>
         <input id="sec-q" placeholder="${esc(t('secSearchPh'))}" value="${esc(secQuery)}"
-          style="padding:8px 14px;border-radius:12px;font-size:13px;font-family:inherit;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;flex:1;min-width:160px">
+          style="padding:8px 14px;border-radius:12px;font-size:13px;font-family:inherit;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none;flex:1;min-width:160px">
         <button class="btn sm" id="sec-clear-30">${esc(t('secClear30'))}</button>
         <button class="btn sm danger" id="sec-clear-all">${esc(t('secClearAll'))}</button>
       </div>
@@ -2762,7 +1929,7 @@ async function loadCodes(){
         <div class="stat-box" style="background:rgba(255,255,255,.06);border-radius:14px;padding:14px;border:1px solid var(--stroke)">
           <div style="color:var(--text-3);font-size:12px">${esc(t('codesColTraffic'))}</div>
           <div style="font-size:18px;font-weight:700;margin-top:4px">${usedTrafficGB} / ${totalTrafficGB} GB</div>
-          <div style="margin-top:6px;height:4px;background:var(--track-bg);border-radius:2px;overflow:hidden">
+          <div style="margin-top:6px;height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden">
             <div style="height:100%;width:${trafficPct}%;background:linear-gradient(90deg,#34d399,#60a5fa);border-radius:2px"></div>
           </div>
         </div>
@@ -2811,7 +1978,7 @@ async function loadCodes(){
       <div class="section-title">
         <h2>📋 ${esc(t('codesListTitle'))} <span id="codes-total-count" style="color:var(--text-3);font-weight:400;font-size:13px"></span></h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select id="cf-status" style="padding:8px 12px;border-radius:10px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:13px;font-family:inherit;outline:none">
+          <select id="cf-status" style="padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);color:#fff;font-size:13px;font-family:inherit;outline:none">
             <option value="">${esc(t('codesFilterAll'))} ${esc(t('codesFilterStatus'))}</option>
             <option value="unused">${esc(t('codesStatusUnused'))}</option>
             <option value="active">${esc(t('codesStatusActive'))}</option>
@@ -2819,11 +1986,11 @@ async function loadCodes(){
             <option value="exhausted">${esc(t('codesStatusExhausted'))}</option>
             <option value="revoked">${esc(t('codesStatusRevoked'))}</option>
           </select>
-          <select id="cf-batch" style="padding:8px 12px;border-radius:10px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:13px;font-family:inherit;outline:none">
+          <select id="cf-batch" style="padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);color:#fff;font-size:13px;font-family:inherit;outline:none">
             <option value="">${esc(t('codesFilterAll'))} ${esc(t('codesFilterBatch'))}</option>
             ${batchOptions.map(b => `<option value="${esc(b.batch_id)}">${esc(b.batch_id)} (${b.count||b.n||0})</option>`).join('')}
           </select>
-          <input type="text" id="cf-q" placeholder="${esc(t('codesFilterQ'))}" value="${esc(codesQ)}" style="padding:8px 12px;border-radius:10px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:13px;font-family:inherit;outline:none;width:180px">
+          <input type="text" id="cf-q" placeholder="${esc(t('codesFilterQ'))}" value="${esc(codesQ)}" style="padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);color:#fff;font-size:13px;font-family:inherit;outline:none;width:180px">
           <button class="btn sm" id="cf-export">${esc(t('codesExportCsv'))}</button>
           <button class="btn sm danger" id="cf-revoke-batch">${esc(t('codesRevokeBatch'))}</button>
         </div>
@@ -2941,7 +2108,7 @@ async function loadCodesList(){
               <td style="padding:10px 8px;color:var(--text-2)">${esc(r.batch_id||'—')}</td>
               <td style="padding:10px 8px">
                 <div>${usedGB} / ${trafficGB}</div>
-                ${r.traffic_bytes > 0 ? `<div style="margin-top:4px;height:3px;background:var(--track-bg);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#34d399,#60a5fa);border-radius:2px"></div></div>` : ''}
+                ${r.traffic_bytes > 0 ? `<div style="margin-top:4px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#34d399,#60a5fa);border-radius:2px"></div></div>` : ''}
               </td>
               <td style="padding:10px 8px"><span style="color:${statusColor[r.status]||'#fff'}">${esc(statusLabel[r.status]||r.status)}</span></td>
               <td style="padding:10px 8px;color:var(--text-2)">${fmtTime(r.activated_at)}</td>
@@ -2989,126 +2156,11 @@ async function loadCodesList(){
   } catch(err) { toast(err.message, 'err'); }
 }
 
-/* ═══════════ WebDAV ═══════════ */
-async function loadWebDAV(){
-  const s = await api('/api/admin/settings');
-  const v = $('#view');
-  v.innerHTML = `
-    <div class="glass section">
-      <div class="section-title">
-        <h2>🗂️ ${esc(t('webdavGroupTitle'))}</h2>
-      </div>
-      <div class="sub" style="color:var(--text-2);font-size:13px;margin-bottom:14px">${esc(t('webdavGroupD'))}</div>
-
-      <!-- 状态概览 -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:18px">
-        <div style="background:var(--sf-soft);border-radius:14px;padding:14px;border:1px solid var(--stroke)">
-          <div style="color:var(--text-3);font-size:12px">${esc(t('webdavEnable'))}</div>
-          <div style="font-size:18px;font-weight:600;margin-top:4px;color:${s.webdav_enabled ? '#16a34a' : '#9ca3af'}">${s.webdav_enabled ? (LANG==='zh'?'已启用':'Enabled') : (LANG==='zh'?'未启用':'Disabled')}</div>
-        </div>
-        <div style="background:var(--sf-soft);border-radius:14px;padding:14px;border:1px solid var(--stroke)">
-          <div style="color:var(--text-3);font-size:12px">${esc(t('webdavUsername'))}</div>
-          <div style="font-size:18px;font-weight:600;margin-top:4px">${esc(s.webdav_username || 'webdav')}</div>
-        </div>
-        <div style="background:var(--sf-soft);border-radius:14px;padding:14px;border:1px solid var(--stroke)">
-          <div style="color:var(--text-3);font-size:12px">${esc(t('webdavPassword'))}</div>
-          <div style="font-size:18px;font-weight:600;margin-top:4px;color:${s.webdav_password_configured ? '#16a34a' : '#d97706'}">${s.webdav_password_configured ? '✓ ' + esc(t('webdavPasswordSet')) : '⚠ ' + esc(t('webdavPasswordUnset'))}</div>
-        </div>
-        <div style="background:var(--sf-soft);border-radius:14px;padding:14px;border:1px solid var(--stroke)">
-          <div style="color:var(--text-3);font-size:12px">${esc(t('webdavRootPath'))}</div>
-          <div style="font-size:18px;font-weight:600;margin-top:4px;font-family:ui-monospace,'SF Mono',monospace">${esc(s.webdav_root_path || '/')}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 配置卡片 -->
-    <div class="glass section">
-      <h3 style="margin:0 0 4px;font-size:15px;font-weight:600">${esc(t('webdavGroupTitle'))}</h3>
-      <div style="color:var(--text-3);font-size:12.5px;margin-bottom:14px">${esc(t('webdavGroupD'))}</div>
-
-      <div class="row" style="padding:14px 0;border:none;border-bottom:1px solid var(--stroke);display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div class="info" style="flex:1;min-width:0">
-          <div class="t" style="font-size:14.5px;font-weight:600">${esc(t('webdavEnable'))}</div>
-          <div class="d" style="margin-top:3px;font-size:12.5px;color:var(--text-3);line-height:1.5">${LANG==='zh'?'开启后，可通过 WebDAV 客户端访问以下地址':'Once enabled, connect to the URL below from any WebDAV client'}</div>
-        </div>
-        <label class="switch" style="flex:none">
-          <input type="checkbox" id="wd-enable" ${s.webdav_enabled?'checked':''}>
-          <span class="track"><span class="thumb"></span></span>
-        </label>
-      </div>
-
-      <div class="row" style="padding:14px 0;border:none;border-bottom:1px solid var(--stroke);display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div class="info" style="flex:1;min-width:0">
-          <div class="t" style="font-size:14.5px;font-weight:600">${esc(t('webdavUsername'))}</div>
-        </div>
-        <input type="text" id="wd-username" value="${esc(s.webdav_username ?? 'webdav')}" style="width:200px;padding:9px 14px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14px;font-family:inherit;outline:none">
-      </div>
-
-      <div class="row" style="padding:14px 0;border:none;border-bottom:1px solid var(--stroke);display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div class="info" style="flex:1;min-width:0">
-          <div class="t" style="font-size:14.5px;font-weight:600">${esc(t('webdavPassword'))}</div>
-          <div class="d" style="margin-top:3px;font-size:12.5px;color:var(--text-3);line-height:1.5">${s.webdav_password_configured ? '<span style="color:#16a34a">✓ '+esc(t('webdavPasswordSet'))+'</span>' : '<span style="color:#d97706">⚠ '+esc(t('webdavPasswordUnset'))+'</span>'}</div>
-        </div>
-        <input type="password" id="wd-password" value="" placeholder="${esc(t('webdavPasswordPh'))}" style="width:220px;padding:9px 14px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14px;font-family:ui-monospace,'SF Mono',monospace;outline:none">
-      </div>
-
-      <div class="row" style="padding:14px 0;border:none;display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div class="info" style="flex:1;min-width:0">
-          <div class="t" style="font-size:14.5px;font-weight:600">${esc(t('webdavRootPath'))}</div>
-          <div class="d" style="margin-top:3px;font-size:12.5px;color:var(--text-3);line-height:1.5">${esc(t('webdavRootPathHelp'))}</div>
-        </div>
-        <input type="text" id="wd-root" value="${esc(s.webdav_root_path ?? '/')}" style="width:200px;padding:9px 14px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14px;font-family:ui-monospace,'SF Mono',monospace;outline:none">
-      </div>
-    </div>
-
-    <!-- WebDAV 地址 -->
-    <div class="glass section">
-      <h3 style="margin:0 0 4px;font-size:15px;font-weight:600">${esc(t('webdavUrl'))}</h3>
-      <div style="color:var(--text-3);font-size:12.5px;margin-bottom:14px">${esc(t('webdavUrlHint'))}</div>
-      <div style="padding:14px 16px;border-radius:14px;background:var(--sf-soft);border:1px solid var(--stroke);font-family:ui-monospace,'SF Mono',monospace;font-size:13px;color:var(--blue);word-break:break-all;cursor:pointer" onclick="this.select()">${esc(window.location.origin)}/webdav${s.webdav_root_path && s.webdav_root_path !== '/' ? esc(s.webdav_root_path) : ''}/</div>
-    </div>
-
-    <!-- 保存按钮 -->
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">
-      <button class="btn" id="wd-clear" style="padding:12px 22px;font-size:14px;border-radius:14px">${esc(t('webdavPasswordClear'))}</button>
-      <button class="btn primary" id="wd-save" style="padding:12px 28px;font-size:14px;border-radius:14px">${esc(t('save'))}</button>
-    </div>
-  `;
-
-  // 清除密码按钮
-  $('#wd-clear')?.addEventListener('click', async () => {
-    if (!(await confirmDialog(
-      LANG==='zh'?'确认清除密码？':'Clear password?',
-      LANG==='zh'?'清除后，下次保存时需要重新输入密码才能保护 WebDAV。':'After clearing, you must set a new password on the next save to protect WebDAV.'
-    ))) return;
-    await api('/api/admin/settings', {
-      method: 'PUT',
-      body: JSON.stringify({ webdav_password: '__clear__' }),
-    });
-    toast(LANG==='zh'?'密码已清除':'Password cleared', 'ok');
-    loadWebDAV();
-  });
-
-  // 保存按钮
-  $('#wd-save')?.addEventListener('click', async () => {
-    const body = {
-      webdav_enabled: $('#wd-enable').checked,
-      webdav_username: $('#wd-username').value.trim(),
-      webdav_root_path: $('#wd-root').value.trim(),
-      webdav_password: $('#wd-password').value ? $('#wd-password').value : '__keep__',
-    };
-    await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });
-    toast(t('saved'));
-    loadWebDAV();
-  });
-}
-
 /* ═══════════ 设置 ═══════════ */
 async function loadSettings(){
-  const [s, twofaStatus, dbStatus] = await Promise.all([
+  const [s, twofaStatus] = await Promise.all([
     api('/api/admin/settings'),
     api('/api/admin/2fa/status').catch(() => ({enabled:false, cloudflare_recovery:false, recovery_remaining:0})),
-    api('/api/admin/db/status').catch(() => null),
   ]);
   $('#view').innerHTML = `
     <div class="glass group">
@@ -3160,10 +2212,10 @@ async function loadSettings(){
     <div class="glass group">
       <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
         <div class="info" style="margin-bottom:4px"><div class="t">🔒 ${esc(t('ipWhitelist'))}</div><div class="d">${esc(t('ipWhitelistD'))}</div></div>
-        <textarea id="st-adminips" rows="3" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace;resize:vertical" placeholder="${esc(t('ipWhitelistPh'))}">${esc(s.admin_ips ?? '')}</textarea>
-        <div class="tip" style="margin-top:4px;line-height:1.7">
-          <div>${s.admin_ips ? `<span style="color:#16a34a">${esc(t('ipWhitelistOn'))}</span>` : `<span style="color:#d97706">${esc(t('ipWhitelistOff'))}</span>`}</div>
-          <div>${esc(t('ipWhitelistHint'))}</div>
+        <textarea id="st-adminips" rows="3" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace;resize:vertical" placeholder="${esc(t('ipWhitelistPh'))}">${esc(s.admin_ips ?? '')}</textarea>
+        <div class="tip" style="margin-top:4px">
+          ${s.admin_ips ? `<span style="color:#6ee7b7">${esc(t('ipWhitelistOn'))}</span>` : `<span style="color:#fde68a">${esc(t('ipWhitelistOff'))}</span>`}
+          ${esc(t('ipWhitelistHint'))}
         </div>
       </div>
     </div>
@@ -3189,7 +2241,7 @@ async function loadSettings(){
       </div>
       <div class="row">
         <div class="info"><div class="t">${esc(t('codesFloatingBtnPosition'))}</div><div class="d">${esc(t('codesFloatingBtnHint'))}</div></div>
-        <select id="st-codes-pos" style="padding:9px 14px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14px;font-family:inherit;outline:none;min-width:110px">
+        <select id="st-codes-pos" style="padding:9px 14px;border-radius:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);color:#fff;font-size:14px;font-family:inherit;outline:none;min-width:110px">
           <option value="top-right" ${(s.codes_floating_button_position || 'top-right') === 'top-right' ? 'selected' : ''}>${esc(t('codesFloatingBtnPosRight'))}</option>
           <option value="top-left" ${s.codes_floating_button_position === 'top-left' ? 'selected' : ''}>${esc(t('codesFloatingBtnPosLeft'))}</option>
         </select>
@@ -3198,7 +2250,7 @@ async function loadSettings(){
     <!-- 2FA 组 -->
     <div class="glass group">
       <div class="row">
-        <div class="info"><div class="t">🛡️ ${esc(t('twofa'))} ${twofaStatus.enabled ? `<span class="tag active" style="margin-left:6px"><i></i>${esc(t('twofaStatusOn'))}</span>` : `<span class="tag" style="margin-left:6px;background:var(--sf-input);color:#a5b4fc"><i></i>${esc(t('twofaStatusOff'))}</span>`}</div>
+        <div class="info"><div class="t">🛡️ ${esc(t('twofa'))} ${twofaStatus.enabled ? `<span class="tag active" style="margin-left:6px"><i></i>${esc(t('twofaStatusOn'))}</span>` : `<span class="tag" style="margin-left:6px;background:rgba(255,255,255,.1);color:#a5b4fc"><i></i>${esc(t('twofaStatusOff'))}</span>`}</div>
         <div class="d">${esc(t('twofaD'))}</div></div>
         <label class="switch" id="twofa-switch" style="${twofaStatus.enabled ? '' : 'opacity:.5;pointer-events:none'}">
           <input type="checkbox" ${twofaStatus.enabled ? 'checked' : ''} disabled>
@@ -3230,7 +2282,7 @@ async function loadSettings(){
               <span style="color:${s.turnstile_mode==='off'?'#a5b4fc':'#6ee7b7'}">${esc(t('tsMode'))}: ${s.turnstile_mode}</span>
               · <span>${esc(t('tsThreshold'))}: ${s.turnstile_threshold ?? 5}</span>
               · ${s.cloudflare_turnstile_secret ? `<span style="color:#6ee7b7">✓ ${esc(t('tsSecretOk'))}</span>` : `<span style="color:#fda293">⚠ ${esc(t('tsSecretMissing'))}</span>`}
-              · ${s.cloudflare_turnstile_sitekey ? `<span style="color:#6ee7b7">✓ Sitekey Cloudflare</span>` : (s.turnstile_sitekey_override ? `<span style="color:var(--blue)">✓ Sitekey Override</span>` : `<span style="color:#fde68a">⚠ Sitekey Missing</span>`)}
+              · ${s.cloudflare_turnstile_sitekey ? `<span style="color:#6ee7b7">✓ Sitekey Cloudflare</span>` : (s.turnstile_sitekey_override ? `<span style="color:#a5d8ff">✓ Sitekey Override</span>` : `<span style="color:#fde68a">⚠ Sitekey Missing</span>`)}
             </div>
           </div>
         </div>
@@ -3260,7 +2312,7 @@ async function loadSettings(){
       <!-- Provider 卡片列表 -->
       <div id="oauth-providers-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:6px">
         ${(s.oauth_providers && s.oauth_providers.length) ? s.oauth_providers.map(p => `
-          <div class="oauth-provider-card" data-oauth-id="${esc(p.id)}" style="padding:14px;border-radius:14px;background:var(--sf-soft);border:1px solid ${p.enabled ? 'rgba(110,231,183,.45)' : 'var(--stroke)'}">
+          <div class="oauth-provider-card" data-oauth-id="${esc(p.id)}" style="padding:14px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid ${p.enabled ? 'rgba(110,231,183,.35)' : 'rgba(255,255,255,.1)'}">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
               <div style="font-weight:600;font-size:14px">${esc(p.label)} <span style="font-size:11px;color:var(--text-3);font-weight:400">${esc(p.provider_type)}</span></div>
               <span class="tag ${p.enabled?'active':''}" style="font-size:11px"><i></i>${p.enabled ? esc(t('oauthEnabled')) : esc(t('oauthDisabled'))}</span>
@@ -3281,113 +2333,7 @@ async function loadSettings(){
         <button class="btn primary" id="oauth-add" style="padding:10px 20px;font-size:13px;border-radius:14px">+ ${esc(t('oauthAddProvider'))}</button>
       </div>
     </div>
-    <!-- 存储后端 -->
-    <div class="glass group">
-      <div class="row" style="align-items:flex-start">
-        <div class="info" style="flex:1">
-          <div class="t">${esc(t('storageBackendTitle'))}</div>
-          <div class="d" style="font-size:12px;line-height:1.6;margin-top:2px">${esc(t('storageBackendD'))}</div>
-        </div>
-        <select id="st-backend" style="padding:9px 14px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14px;font-family:inherit;outline:none;min-width:170px">
-          <option value="r2" ${(s.storage_provider||'r2')==='r2'?'selected':''}>${esc(t('storageBackendR2'))}</option>
-          <option value="s3" ${s.storage_provider==='s3'?'selected':''}>${esc(t('storageBackendS3'))}</option>
-          <option value="webdav" ${s.storage_provider==='webdav'?'selected':''}>${esc(t('storageBackendWebDAV'))}</option>
-        </select>
-      </div>
-      <div style="font-size:12px;line-height:1.7;margin-top:10px">
-        ${(s.storage_provider||'r2')==='webdav'
-          ? `<span style="${s.storage_webdav_url && s.storage_webdav_username && s.storage_webdav_password_configured ? 'color:#6ee7b7' : 'color:#fda293'}">`
-            + (s.storage_webdav_url && s.storage_webdav_username && s.storage_webdav_password_configured
-              ? `✓ WebDAV: ${esc(s.storage_webdav_url)} · ${esc(s.storage_webdav_username)}`
-              : `⚠ ${esc(t('storageBackendNotSet'))}`)
-            + `</span>`
-          : (s.storage_provider==='s3'
-              ? `<span style="${s.s3_endpoint && s.s3_bucket ? 'color:#6ee7b7' : 'color:#fda293'}">S3: ${esc(s.s3_endpoint||'')} / ${esc(s.s3_bucket||'')||'⚠ '+esc(t('storageBackendNotSet'))}</span>`
-              : `<span style="color:#6ee7b7">✓ ${esc(t('storageBackendR2'))}</span>`)}
-      </div>
-      <div class="row" style="justify-content:flex-end;margin-top:10px;gap:8px">
-        <button class="btn sm" id="st-backend-webdav-cfg" style="${(s.storage_provider||'r2')==='webdav' ? '' : 'opacity:.5'}">🔗 ${esc(t('storageBackendConfig'))} WebDAV</button>
-      </div>
-    </div>
-    <!-- 数据库健康 -->
-    <div class="glass group">
-      <div class="row" style="align-items:flex-start">
-        <div class="info" style="flex:1">
-          <div class="t">${esc(t('dbToolsTitle'))}</div>
-          <div class="d" style="font-size:12px;line-height:1.6;margin-top:2px">${esc(t('dbToolsD'))}</div>
-        </div>
-        ${dbStatus ? (dbStatus.healthy
-          ? `<span class="tag active"><i></i>${esc(t('dbHealthy'))}</span>`
-          : `<span class="tag" style="background:rgba(255,159,10,.16);color:#fcd34d"><i></i>${esc(t('dbNeedRepair'))}</span>`
-        ) : `<span class="tag" style="background:var(--sf-input);color:#a5b4fc"><i></i>—</span>`}
-      </div>
-      ${dbStatus ? `
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px">
-          <div style="padding:10px 14px;border-radius:12px;background:var(--sf-soft);border:1px solid var(--stroke)">
-            <div style="font-size:11px;color:var(--text-3);margin-bottom:2px">${esc(t('dbTables'))}</div>
-            <div style="font-size:14px;font-weight:600">${esc(t('dbTablesOk',{a:dbStatus.tables.existing.length,b:dbStatus.tables.expected.length}))}</div>
-            ${dbStatus.tables.missing.length ? `<div style="font-size:11.5px;color:#fda293;margin-top:3px">${esc(t('dbStatusMissingTables'))}: ${dbStatus.tables.missing.join(', ')}</div>` : ''}
-          </div>
-          <div style="padding:10px 14px;border-radius:12px;background:var(--sf-soft);border:1px solid var(--stroke)">
-            <div style="font-size:11px;color:var(--text-3);margin-bottom:2px">${esc(t('dbColumns'))}</div>
-            <div style="font-size:14px;font-weight:600;color:${dbStatus.columns.length ? '#fcd34d' : '#6ee7b7'}">${dbStatus.columns.length ? esc(t('dbMissingCount',{n:dbStatus.columns.length})) : '✓'}</div>
-            ${dbStatus.columns.length ? `<div style="font-size:11.5px;color:#fda293;margin-top:3px">${dbStatus.columns.map(c=>c.table+'.'+c.column).join(', ')}</div>` : ''}
-          </div>
-          <div style="padding:10px 14px;border-radius:12px;background:var(--sf-soft);border:1px solid var(--stroke)">
-            <div style="font-size:11px;color:var(--text-3);margin-bottom:2px">${esc(t('dbIndexes'))}</div>
-            <div style="font-size:14px;font-weight:600;color:${dbStatus.indexes.length ? '#fcd34d' : '#6ee7b7'}">${dbStatus.indexes.length ? esc(t('dbMissingCount',{n:dbStatus.indexes.length})) : '✓'}</div>
-            ${dbStatus.indexes.length ? `<div style="font-size:11.5px;color:#fda293;margin-top:3px">${dbStatus.indexes.join(', ')}</div>` : ''}
-          </div>
-          <div style="padding:10px 14px;border-radius:12px;background:var(--sf-soft);border:1px solid var(--stroke)">
-            <div style="font-size:11px;color:var(--text-3);margin-bottom:2px">${esc(t('dbMigration'))}</div>
-            <div style="font-size:14px;font-weight:600;color:${dbStatus.migration.latest ? '#6ee7b7' : '#fcd34d'}">${dbStatus.migration.current} / ${dbStatus.migration.total}</div>
-          </div>
-        </div>
-        ${Object.keys(dbStatus.tableCounts).length ? `
-          <details style="margin-top:10px">
-            <summary style="cursor:pointer;font-size:12px;color:var(--text-3);user-select:none">${esc(t('dbTableRows'))}</summary>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
-              ${Object.entries(dbStatus.tableCounts).map(([t,c]) => `<span style="font-size:11.5px;padding:3px 9px;border-radius:8px;background:rgba(255,255,255,.07);font-family:ui-monospace,'SF Mono',monospace;color:var(--text-2)">${t}: ${c}</span>`).join('')}
-            </div>
-          </details>` : ''}
-      ` : `<div style="font-size:12px;color:#fda293;margin-top:8px">—</div>`}
-      <div class="row" style="justify-content:flex-end;margin-top:10px;gap:8px">
-        <button class="btn sm" id="db-refresh">${esc(t('dbStatusRefresh'))}</button>
-        <button class="btn sm ${dbStatus && dbStatus.healthy ? '' : 'primary'}" id="db-repair">${esc(t('dbRepairBtn'))}</button>
-      </div>
-    </div>
     <button class="btn primary" id="st-save" style="padding:14px 28px;font-size:15px;border-radius:18px">${esc(t('save'))}</button>`;
-
-  // ── 数据库工具按钮 ──
-  $('#db-refresh')?.addEventListener('click', () => loadSettings());
-  $('#db-repair')?.addEventListener('click', async () => {
-    if (!(await confirmDialog(t('dbRepairConfirmT'), t('dbRepairConfirmD')))) return;
-    const btn = $('#db-repair');
-    const orig = btn.textContent;
-    btn.textContent = t('dbRepairing');
-    btn.disabled = true;
-    try {
-      const r = await api('/api/admin/db/repair', { method: 'POST' });
-      if (r.ok) {
-        // 构造详细描述
-        const parts = [];
-        if (r.tablesCreated.length) parts.push(`${t('dbRepairDetailTables')} ${r.tablesCreated.length}`);
-        if (r.columnsAdded.length)   parts.push(`${t('dbRepairDetailCols')} ${r.columnsAdded.length}`);
-        if (r.indexesCreated.length) parts.push(`${t('dbRepairDetailIdx')} ${r.indexesCreated.length}`);
-        if (r.migrationsRun)         parts.push(`${t('dbRepairDetailMigrations')} ${r.migrationsRun}`);
-        parts.push(`${t('dbRepairDetailTime')} ${r.durationMs}ms`);
-        toast(t('dbRepairOk') + (parts.length ? ` · ${parts.join(' · ')}` : ''), 'ok');
-      } else {
-        toast(t('dbRepairFail') + (r.error ? ': ' + r.error : ''), 'err');
-      }
-    } catch (e) {
-      toast(t('dbRepairFail') + ': ' + (e.message || e), 'err');
-    } finally {
-      btn.textContent = orig;
-      btn.disabled = false;
-      loadSettings(); // 刷新状态
-    }
-  });
 
   $('#st-reset-traffic')?.addEventListener('click', async () => {
     if(!(await confirmDialog(t('confirmResetT'), t('confirmResetD'), false))) return;
@@ -3419,96 +2365,10 @@ async function loadSettings(){
       home_redirect_market: $('#st-home-market').checked,
       codes_floating_button_enabled: $('#st-codes-float').checked,
       codes_floating_button_position: $('#st-codes-pos').value,
-      storage_provider: $('#st-backend').value,
     };
     await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });
     toast(t('saved'));
     loadSettings();
-  });
-
-  // ═══════════════════════════════════
-  // WebDAV 存储后端配置 Modal
-  // ═══════════════════════════════════
-  $('#st-backend-webdav-cfg')?.addEventListener('click', async () => {
-    const s = await api('/api/admin/settings');
-    openModal(`
-      <h3>🔗 WebDAV ${esc(t('storageBackendConfig'))}</h3>
-      <div class="sub" style="font-size:12.5px;line-height:1.6">
-        ${LANG==='zh'
-          ? '填入任意支持 WebDAV 的网盘地址，如：<br>• 坚果云: <code>https://dav.jianguoyun.com/dav/</code><br>• OneDrive: <code>https://dav.onedrive.com/</code>'
-          : 'Enter any WebDAV-enabled cloud drive URL, e.g.:<br>• Jianguoyun: <code>https://dav.jianguoyun.com/dav/</code><br>• OneDrive: <code>https://dav.onedrive.com/</code>'}
-      </div>
-      <div class="field" style="margin-top:14px">
-        <label>${esc(t('storageBackendUrl'))}</label>
-        <input type="text" id="wd-url" value="${esc(s.storage_webdav_url ?? '')}" placeholder="https://dav.jianguoyun.com/dav/" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
-      </div>
-      <div class="field">
-        <label>${esc(t('storageBackendUser'))}</label>
-        <input type="text" id="wd-user" value="${esc(s.storage_webdav_username ?? '')}" placeholder="your@email.com" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
-      </div>
-      <div class="field">
-        <label>${esc(t('storageBackendPwd'))}</label>
-        <input type="password" id="wd-pwd" value="" placeholder="${s.storage_webdav_password_configured ? esc(t('storageBackendPwdKeep')) : ''}" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
-        <div class="tip" style="line-height:1.6;margin-top:4px">
-          ${s.storage_webdav_password_configured
-            ? `<span style="color:#6ee7b7">✓ ${LANG==='zh'?'已设置':'Set'}</span> — ${esc(t('storageBackendPwdKeep'))}`
-            : `<span style="color:#fda293">⚠ ${LANG==='zh'?'未设置':'Not set'}</span>`}
-        </div>
-      </div>
-      <div class="field" style="margin-top:4px">
-        <button class="btn sm" id="wd-test" style="padding:8px 16px;font-size:12.5px;border-radius:12px">🧪 ${esc(t('storageBackendTest'))}</button>
-        <span id="wd-test-result" style="margin-left:10px;font-size:12.5px;color:var(--text-3)"></span>
-      </div>
-      <div class="actions" style="margin-top:18px">
-        <button class="btn" data-x>${esc(t('cancel'))}</button>
-        <button class="btn primary" id="wd-save">${esc(t('save'))}</button>
-      </div>
-    `);
-    $('[data-x]')?.addEventListener('click', closeModal);
-
-    $('#wd-test')?.addEventListener('click', async () => {
-      const url = $('#wd-url').value.trim();
-      const user = $('#wd-user').value.trim();
-      const pwd = $('#wd-pwd').value.trim();
-      const result = $('#wd-test-result');
-      if (!url || !user) { result.textContent = LANG==='zh' ? '请填写 URL 和用户名' : 'URL and username required'; result.style.color = '#fda293'; return; }
-      result.textContent = '…'; result.style.color = 'var(--text-3)';
-      try {
-        const payload: any = { provider: 'webdav', url, username: user };
-        if (pwd) payload.password = pwd;
-        const r = await api('/api/admin/storage/test', { method: 'POST', body: JSON.stringify(payload) });
-        if (r.ok) {
-          result.textContent = `✓ ${esc(t('storageBackendConnected'))} (${r.entries_found ?? 0} entries)`;
-          result.style.color = '#6ee7b7';
-        } else {
-          result.textContent = `✗ ${esc(t('storageBackendConnectFail'))}: ${r.message || r.error || ''}`;
-          result.style.color = '#fda293';
-        }
-      } catch (e: any) {
-        result.textContent = `✗ ${esc(t('storageBackendConnectFail'))}: ${e?.message ?? ''}`;
-        result.style.color = '#fda293';
-      }
-    });
-
-    $('#wd-save')?.addEventListener('click', async () => {
-      const url = $('#wd-url').value.trim().replace(/\/+$/, '');
-      const user = $('#wd-user').value.trim();
-      const pwdVal = $('#wd-pwd').value.trim();
-      const body: any = {
-        storage_provider: 'webdav',
-        storage_webdav_url: url,
-        storage_webdav_username: user,
-      };
-      if (pwdVal === '') {
-        body.storage_webdav_password = '__keep__';
-      } else {
-        body.storage_webdav_password = pwdVal;
-      }
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
-      closeModal();
-      toast(t('saved'));
-      loadSettings();
-    });
   });
 
   // ═══════════════════════════════════
@@ -3521,7 +2381,7 @@ async function loadSettings(){
       <div class="sub">${esc(t('tsGroupD'))}</div>
       <div class="field" style="margin-top:14px">
         <label>${esc(t('tsMode'))}</label>
-        <select id="ts-m" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+        <select id="ts-m" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
           <option value="off" ${s.turnstile_mode==='off'?'selected':''} style="color:#111">${esc(t('tsModeOff'))}</option>
           <option value="on_share" ${s.turnstile_mode==='on_share'?'selected':''} style="color:#111">${esc(t('tsModeShare'))}</option>
           <option value="on_download" ${s.turnstile_mode==='on_download'?'selected':''} style="color:#111">${esc(t('tsModeDownload'))}</option>
@@ -3530,26 +2390,26 @@ async function loadSettings(){
       </div>
       <div class="field">
         <label>${esc(t('tsThreshold'))}</label>
-        <input type="number" id="ts-th" min="0" max="10000" value="${s.turnstile_threshold ?? 5}" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none">
+        <input type="number" id="ts-th" min="0" max="10000" value="${s.turnstile_threshold ?? 5}" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none">
         <div class="tip">${esc(t('tsThresholdHelp'))}</div>
       </div>
       <div class="field">
         <label>${esc(t('tsSitekeyOverride'))}</label>
-        <input type="text" id="ts-sko" value="${esc(s.turnstile_sitekey_override ?? '')}" placeholder="0xAAAA..." style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
+        <input type="text" id="ts-sko" value="${esc(s.turnstile_sitekey_override ?? '')}" placeholder="0xAAAA..." style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
       </div>
       <div class="field">
         <label>${esc(t('tsSecretOverride'))}</label>
-        <input type="password" id="ts-secret" value="" placeholder="${s.cloudflare_turnstile_secret || s.turnstile_secret_configured ? esc(t('tsSecretKeep')) : esc(t('tsSecretPlaceholder'))}" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
+        <input type="password" id="ts-secret" value="" placeholder="${s.cloudflare_turnstile_secret || s.turnstile_secret_configured ? esc(t('tsSecretKeep')) : esc(t('tsSecretPlaceholder'))}" style="width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:#fff;background:rgba(255,255,255,.09);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
         <div class="tip" style="line-height:1.6">
           ${s.cloudflare_turnstile_secret
             ? `<span style="color:#6ee7b7">✓ ${esc(t('tsSecretOk'))} — ${esc(t('tsSecretInCloudflare'))}</span>`
             : s.turnstile_secret_configured
-              ? `<span style="color:var(--blue)">✓ ${esc(t('tsSecretOk'))} — ${esc(t('tsSecretInDatabase'))}</span>`
+              ? `<span style="color:#a5d8ff">✓ ${esc(t('tsSecretOk'))} — ${esc(t('tsSecretInDatabase'))}</span>`
               : `<span style="color:#fda293">⚠ ${esc(t('tsSecretMissing'))} — ${esc(t('tsSecretHint'))}</span>`}<br>
           ${s.cloudflare_turnstile_sitekey
             ? `<span style="color:#6ee7b7">✓ Sitekey ${esc(t('tsInCloudflare'))}</span>`
             : s.turnstile_sitekey_override
-              ? `<span style="color:var(--blue)">✓ Sitekey ${esc(t('tsInDatabase'))}</span>`
+              ? `<span style="color:#a5d8ff">✓ Sitekey ${esc(t('tsInDatabase'))}</span>`
               : `<span style="color:#fde68a">⚠ Sitekey ${esc(t('tsMissingBoth'))}</span>`}
         </div>
       </div>
@@ -3656,7 +2516,7 @@ async function loadSettings(){
       <div class="field" style="margin-top:8px">
         <div style="font-size:12px;color:var(--text-3);line-height:1.6">
           ${esc(t('oauthCallbackUrl'))}:<br>
-          <input type="text" readonly value="${esc(window.location.origin)}/oauth/callback" style="width:100%;margin-top:4px;padding:8px 12px;border-radius:10px;font-size:12px;color:var(--blue);background:rgba(0,0,0,.3);border:1px solid var(--stroke);outline:none;font-family:ui-monospace,'SF Mono',monospace" onclick="this.select()">
+          <input type="text" readonly value="${esc(window.location.origin)}/oauth/callback" style="width:100%;margin-top:4px;padding:8px 12px;border-radius:10px;font-size:12px;color:#a5d8ff;background:rgba(0,0,0,.3);border:1px solid var(--stroke);outline:none;font-family:ui-monospace,'SF Mono',monospace" onclick="this.select()">
           <div style="margin-top:4px">${esc(t('oauthCallbackHint'))}</div>
         </div>
       </div>
@@ -3745,7 +2605,7 @@ async function loadSettings(){
         </div>
         <div style="margin:10px 0;font-size:13px">
           <div style="color:var(--text-3);margin-bottom:4px">${esc(t('twofaSetupKey'))}:</div>
-          <input readonly value="${esc(r.secret)}" style="width:100%;padding:10px 12px;border-radius:10px;font-family:ui-monospace,'SF Mono',monospace;font-size:13px;color:var(--blue);background:rgba(0,0,0,.3);border:1px solid var(--stroke)" onclick="this.select()">
+          <input readonly value="${esc(r.secret)}" style="width:100%;padding:10px 12px;border-radius:10px;font-family:ui-monospace,'SF Mono',monospace;font-size:13px;color:#a5d8ff;background:rgba(0,0,0,.3);border:1px solid var(--stroke)" onclick="this.select()">
         </div>
         <div class="field" style="margin:12px 0">
           <input type="text" id="2fa-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="${esc(t('twofaSetupCodePh'))}" style="text-align:center;letter-spacing:.4em;font-size:18px">

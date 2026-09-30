@@ -1,5 +1,5 @@
 import type { Env } from "./types";
-import { ensureSchema, randomId } from "./db";
+import { ensureSchema, randomId, getSchemaStatus, repairDatabase } from "./db";
 import { generateCodes, makeBatchId, formatCodeStatus, findCodeByString } from "./codes";
 import { getSettings, updateSettings } from "./settings";
 import { checkAdminKey, createSession, verifySession, clientIp, rateLimitLogin, requireAdminIp } from "./auth";
@@ -48,6 +48,14 @@ function sanitizeName(name: string): string {
     .trim()
     .slice(0, 180);
   return cleaned || "unnamed";
+}
+
+/** 生成带文件名后缀的直链 URL：/d/{token}/{filename}，文件名做 URL 编码 */
+function buildDirectUrl(token: string, fileName?: string | null, downloadName?: string | null): string {
+  const displayName = downloadName?.trim() || fileName?.trim();
+  if (!displayName) return `/d/${token}`;
+  const safe = displayName.replace(/[\\/]/g, "_");
+  return `/d/${token}/${encodeURIComponent(safe)}`;
 }
 
 async function requireAuth(req: Request, env: Env): Promise<Response | null> {
@@ -230,6 +238,7 @@ export async function handleAdminApi(
       totp_enabled: s.totpEnabled,
       cloudflare_recovery: !!env.totp_recovery,
       recovery_remaining: s.totpRecoveryHash ? s.totpRecoveryHash.split(",").filter(Boolean).length : 0,
+      ui_theme: s.uiTheme,
     });
   }
 
@@ -359,6 +368,38 @@ export async function handleAdminApi(
     const st = await storage(env);
     ctx.waitUntil(st.delete(file.key).catch(() => {}));
     return json({ ok: true });
+  }
+
+  // ── 存储浏览（S3 / R2 bucket 内对象列表） ─────────
+  if (path === "/api/admin/storage/objects" && method === "GET") {
+    const prefix = new URL(req.url).searchParams.get("prefix") ?? "";
+    const marker = new URL(req.url).searchParams.get("marker") ?? undefined;
+    const limit = Math.min(500, parseInt(new URL(req.url).searchParams.get("limit") || "100", 10) || 100);
+    try {
+      const st = await storage(env);
+      const result = await st.list({ prefix, marker, limit });
+      return json({ ok: true, ...result, kind: st.kind });
+    } catch (e: any) {
+      return json({ ok: false, error: msg(req, `列存储对象失败: ${e?.message ?? e}`, `Storage list failed: ${e?.message ?? e}`) }, 500);
+    }
+  }
+
+  // ── 删除存储对象（直接删 bucket 中 key；不碰 DB） ──
+  const stDelMatch = /^\/api\/admin\/storage\/objects$/.exec(path);
+  if (stDelMatch && method === "DELETE") {
+    const body = await readJson<{ keys?: string[]; key?: string }>(req).catch(() => ({} as any));
+    const rawKeys = body.keys ?? (body.key ? [body.key] : []);
+    if (!Array.isArray(rawKeys) || rawKeys.length === 0) return json({ error: msg(req, "缺少 keys", "Missing keys") }, 400);
+    // 安全校验：key 不能为空、不能以 / 开头
+    const keys = rawKeys.filter((k: any) => typeof k === "string" && k.length > 0 && !k.startsWith("/"));
+    if (keys.length === 0) return json({ error: msg(req, "无有效 key", "No valid keys") }, 400);
+    try {
+      const st = await storage(env);
+      await Promise.all(keys.map((k) => st.delete(k).catch(() => {})));
+      return json({ ok: true, deleted: keys.length });
+    } catch (e: any) {
+      return json({ ok: false, error: msg(req, `删除失败: ${e?.message ?? e}`, `Delete failed: ${e?.message ?? e}`) }, 500);
+    }
   }
 
   // ── 创建分享 ──────────────────────────────────────
@@ -793,7 +834,7 @@ export async function handleAdminApi(
       notes?: string | null;
     }>(req);
     if (!body.file_id) return json({ error: msg(req, "缺少 file_id", "Missing file_id") }, 400);
-    const file = await env.db.prepare("SELECT id FROM files WHERE id = ?1").bind(body.file_id).first();
+    const file = await env.db.prepare("SELECT id, name FROM files WHERE id = ?1").bind(body.file_id).first<{ id: string; name: string }>();
     if (!file) return json({ error: msg(req, "文件不存在", "File not found") }, 404);
     const expiresAt =
       body.expires_hours && body.expires_hours > 0 ? Date.now() + body.expires_hours * 3600_000 : null;
@@ -810,7 +851,7 @@ export async function handleAdminApi(
     )
       .bind(id, body.file_id, Date.now(), expiresAt, maxDownloads, downloadName, notes)
       .run();
-    return json({ ok: true, id, url: `/d/${id}` }, 201);
+    return json({ ok: true, id, url: buildDirectUrl(id, file.name, downloadName) }, 201);
   }
 
   // ── 直链列表 ──
@@ -833,7 +874,7 @@ export async function handleAdminApi(
     const now = Date.now();
     const list = (results ?? []).map((dl: any) => ({
       ...dl,
-      url: `/d/${dl.id}`,
+      url: buildDirectUrl(dl.id, dl.file_name, dl.download_name),
       status: dl.revoked
         ? "revoked"
         : dl.expires_at && dl.expires_at < now
@@ -860,7 +901,7 @@ export async function handleAdminApi(
         .bind(dlId)
         .first();
       if (!row) return json({ error: msg(req, "直链不存在", "Direct link not found") }, 404);
-      return json({ ...row, url: `/d/${(row as any).id}` });
+      return json({ ...row, url: buildDirectUrl((row as any).id, (row as any).file_name, (row as any).download_name) });
     }
 
     if (method === "PUT") {
@@ -990,8 +1031,19 @@ export async function handleAdminApi(
       s3_access_key_id: s.s3AccessKeyId,
       s3_addressing_style: s.s3AddressingStyle || "path",
       s3_secret_configured: !!s.s3SecretKeyCipher,
+      // 远程 WebDAV 挂载（出站）
+      storage_webdav_url: s.storageWebdavUrl,
+      storage_webdav_username: s.storageWebdavUsername,
+      storage_webdav_password_configured: !!s.storageWebdavPasswordCipher,
       // Analytics Engine
       analytics_engine_available: !!env.analytics,
+      // UI 主题
+      ui_theme: s.uiTheme,
+      // WebDAV
+      webdav_enabled: s.webdavEnabled,
+      webdav_username: s.webdavUsername,
+      webdav_root_path: s.webdavRootPath,
+      webdav_password_configured: !!s.webdavPasswordHash,
     });
   }
 
@@ -1062,7 +1114,7 @@ export async function handleAdminApi(
     // ── 存储后端 ──
     if (typeof body.storage_provider === "string") {
       const sp = body.storage_provider;
-      if (sp === "r2" || sp === "s3") {
+      if (sp === "r2" || sp === "s3" || sp === "webdav") {
         patch.storage_provider = sp;
       }
     }
@@ -1084,6 +1136,46 @@ export async function handleAdminApi(
         if (cipher) patch.s3_secret_key_cipher = cipher;
       }
       // raw === "__keep__" 或不传 → 保留原值不动
+    }
+    // 远程 WebDAV 挂载
+    if (typeof body.storage_webdav_url === "string") patch.storage_webdav_url = body.storage_webdav_url.trim().replace(/\/+$/, "");
+    if (typeof body.storage_webdav_username === "string") patch.storage_webdav_username = body.storage_webdav_username.trim();
+    if (typeof body.storage_webdav_password === "string") {
+      const raw = body.storage_webdav_password;
+      if (raw === "") {
+        patch.storage_webdav_password_cipher = "";
+      } else if (raw !== "__keep__") {
+        const cipher = await encryptSecret(raw, env.admin);
+        if (cipher) patch.storage_webdav_password_cipher = cipher;
+      }
+    }
+
+    // UI 主题
+    if (typeof body.ui_theme === "string") {
+      const t = body.ui_theme;
+      if (t === "light" || t === "dark") {
+        patch.ui_theme = t;
+      }
+    }
+
+    // ── WebDAV ──
+    if (typeof body.webdav_enabled === "boolean") patch.webdav_enabled = body.webdav_enabled ? "1" : "0";
+    if (typeof body.webdav_username === "string") {
+      const u = body.webdav_username.trim();
+      if (u) patch.webdav_username = u.slice(0, 64);
+    }
+    if (typeof body.webdav_root_path === "string") {
+      const rp = body.webdav_root_path.trim();
+      patch.webdav_root_path = rp.startsWith("/") ? rp : "/" + rp;
+    }
+    // WebDAV 密码：空字符串 = 清除；"__keep__" 或不传 = 保留；其他 = 重新 hash
+    if (typeof body.webdav_password === "string") {
+      const raw = body.webdav_password;
+      if (raw === "") {
+        patch.webdav_password_hash = "";
+      } else if (raw !== "__keep__") {
+        patch.webdav_password_hash = await hashPassword(raw);
+      }
     }
 
     await updateSettings(env, patch);
@@ -1536,7 +1628,47 @@ export async function handleAdminApi(
     const body = await readJson<any>(req);
     const s = await getSettings(env);
 
-    // 如果 body 里没传任何 S3 字段，用 settings 里的
+    // ① WebDAV 测试 —— 优先
+    const useWebdav =
+      (body.provider ?? s.storageProvider) === "webdav" &&
+      (body.url ?? s.storageWebdavUrl) &&
+      (body.username ?? s.storageWebdavUsername);
+
+    if (useWebdav) {
+      const { createWebDAVProvider } = await import("./storage");
+      const password = body.password?.trim()
+        ? body.password.trim()
+        : (s.storageWebdavPasswordCipher ? await decryptSecret(s.storageWebdavPasswordCipher, env.admin) : null);
+      if (!password) {
+        return json({ ok: false, error: "missing_webdav_password" }, 400);
+      }
+      try {
+        const prov = createWebDAVProvider({
+          url: (body.url ?? s.storageWebdavUrl!).trim().replace(/\/+$/, ""),
+          username: (body.username ?? s.storageWebdavUsername!).trim(),
+          password,
+        });
+        // 先 list 一下根目录，确认认证 + PROPFIND 正常
+        const listed = await prov.list({ prefix: "", limit: 5 });
+        return json({
+          ok: true,
+          provider: "webdav",
+          url: (body.url ?? s.storageWebdavUrl!).trim(),
+          username: (body.username ?? s.storageWebdavUsername!).trim(),
+          entries_found: listed.entries.length,
+          truncated: listed.truncated,
+        });
+      } catch (err: any) {
+        return json({
+          ok: false,
+          error: "webdav_test_failed",
+          message: String(err?.message ?? err),
+          detail: err?.stack ?? "",
+        }, 502);
+      }
+    }
+
+    // ② S3 测试
     const useS3 =
       (body.provider ?? s.storageProvider) === "s3" &&
       (body.endpoint ?? s.s3Endpoint) &&
@@ -1657,6 +1789,22 @@ export async function handleAdminApi(
       // Analytics Engine 绑定后，下次部署可以升级为经纬度精确查询
       geo_source: "d1_download_logs",
     });
+  }
+
+  // ─══════════════════════════════════════════════════════════
+  //   数据库工具（设置页 —— 诊断 & 修复）
+  // ─══════════════════════════════════════════════════════════
+
+  // GET /api/admin/db/status —— 返回数据库当前 schema 健康状况
+  if (path === "/api/admin/db/status" && method === "GET") {
+    const status = await getSchemaStatus(env);
+    return json(status);
+  }
+
+  // POST /api/admin/db/repair —— 强制跑 ensureSchema + 增量迁移
+  if (path === "/api/admin/db/repair" && method === "POST") {
+    const result = await repairDatabase(env);
+    return json(result);
   }
 
   return json({ error: "not_found" }, 404);
