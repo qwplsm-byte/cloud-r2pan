@@ -12,7 +12,7 @@
     {
       "binding": "db",
       "database_name": "cloud-r2pan",
-      "database_id": ""
+      "database_id": "0374dcf8-4a1c-43c0-81dc-d628993c053b"
     }
   ],
   // ⚠️ R2 是可选的 —— 如果你改用其他 S3 兼容存储（见下方 analytics_engine_datasets），
