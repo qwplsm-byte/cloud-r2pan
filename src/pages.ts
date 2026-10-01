@@ -25,7 +25,8 @@ export function addSecurityHeaders(headers: Headers, opts: { isDownload?: boolea
         "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://cdn.jsdelivr.net",
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
         "frame-src 'self' https://challenges.cloudflare.com",
-        "connect-src 'self' https://challenges.cloudflare.com https://api.github.com https://api.google.com https://graph.microsoft.com https://discord.com",
+        // R2 S3 直传：浏览器需直接 PUT 到 <账号ID>.r2.cloudflarestorage.com，故放行该域
+        "connect-src 'self' https://challenges.cloudflare.com https://api.github.com https://api.google.com https://graph.microsoft.com https://discord.com https://*.r2.cloudflarestorage.com",
         // ECharts 需要加载世界地图 GeoJSON
         "img-src 'self' data: https: https://cdn.jsdelivr.net",
         "form-action 'self'",
