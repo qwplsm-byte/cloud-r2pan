@@ -68,7 +68,7 @@ Database tables (`files` / `shares` / `download_logs` / `banned_ips` / `settings
 | `admin` key rejected | Confirm the `admin` Secret is set and matches your input |
 | Can't find objects in R2 | Confirm the Worker's `r2` binding is added and the bucket is `cloud-r2pan` |
 | Local dev reports no binding | See "Local Development": local emulation is off by default; add bindings temporarily if needed |
-| Single-file upload size | Capped at 100 MB (Workers request body limit); rejected on the frontend |
+| Single-file upload size | Up to 8 GB. Files ≤100 MB go through in one request; larger files are chunked (64 MB/part) and reassembled with R2 multipart so the Workers request body limit no longer applies |
 | Custom domain (optional) | Worker → Settings → Domains & Routes (domain must be on Cloudflare) |
 
 > Manage daily: **Workers → cloud-r2pan → Console / Logs / Metrics**.

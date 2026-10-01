@@ -62,6 +62,32 @@ export interface StorageProvider {
   head(key: string): Promise<{ size: number; contentType: string } | null>;
   /** 列出对象（模拟目录浏览；prefix 为 "" 时列根目录） */
   list(opts: { prefix?: string; marker?: string; limit?: number }): Promise<StorageListResult>;
+  /* ── 分片上传（可选）─────────────────────────────────────
+   * 存在的意义：突破 Cloudflare Workers 的请求体上限（Free/Pro 100MB）。
+   * 前端把一个超大文件切成多个 ≤64MB 的分片逐一发送，每个分片都是一个
+   * 独立的小请求，因此单个文件总大小不再受 100MB 限制。
+   * 不支持分片的后端可以不实现，相关接口会返回 501。
+   */
+  /** 初始化分片上传，返回 uploadId */
+  createMultipartUpload?(
+    key: string,
+    opts: { contentType?: string; contentDisposition?: string }
+  ): Promise<{ uploadId: string }>;
+  /** 上传单个分片（body 为该分片的原始流） */
+  uploadPart?(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    body: ReadableStream<Uint8Array>
+  ): Promise<{ partNumber: number; etag: string }>;
+  /** 合并所有分片，返回最终对象大小 */
+  completeMultipartUpload?(
+    key: string,
+    uploadId: string,
+    parts: { partNumber: number; etag: string }[]
+  ): Promise<{ size: number }>;
+  /** 放弃分片上传，清理已上传的分片 */
+  abortMultipartUpload?(key: string, uploadId: string): Promise<void>;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -125,6 +151,28 @@ export function createR2Provider(r2: R2Bucket): StorageProvider {
         });
       }
       return { entries, truncated: !!result.truncated, nextMarker: result.truncated ? result.cursor : undefined };
+    },
+    // ── R2 multipart：直接使用 binding 的分片上传 API ──
+    async createMultipartUpload(key, opts) {
+      const httpMetadata: Record<string, string> = {};
+      if (opts.contentType) httpMetadata.contentType = opts.contentType;
+      if (opts.contentDisposition) httpMetadata.contentDisposition = opts.contentDisposition;
+      const mpu = await r2.createMultipartUpload(key, { httpMetadata });
+      return { uploadId: mpu.uploadId };
+    },
+    async uploadPart(key, uploadId, partNumber, body) {
+      const mpu = r2.resumeMultipartUpload(key, uploadId);
+      const part = await mpu.uploadPart(partNumber, body);
+      return { partNumber: part.partNumber, etag: part.etag };
+    },
+    async completeMultipartUpload(key, uploadId, parts) {
+      const mpu = r2.resumeMultipartUpload(key, uploadId);
+      const obj = await mpu.complete(parts);
+      return { size: obj.size };
+    },
+    async abortMultipartUpload(key, uploadId) {
+      const mpu = r2.resumeMultipartUpload(key, uploadId);
+      await mpu.abort();
     },
   };
 }

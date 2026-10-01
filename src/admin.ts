@@ -354,6 +354,115 @@ export async function handleAdminApi(
     return json({ ok: true, id, name, size: resultSize }, 201);
   }
 
+  // ── 分片上传（大文件专用，突破 Workers 100MB 请求体上限） ──
+  // 前端把文件切成 ≤64MB 的分片逐片 POST，Worker 用底层存储的 multipart 合并成单个对象。
+  // 因此单文件总大小不再受请求体上限约束（由前端 MAX 控制，当前 8GB）。
+  const KEY_RE = /^files\/[A-Za-z0-9]+$/;
+
+  // ① 初始化分片上传
+  if (path === "/api/admin/upload/multipart/init" && method === "POST") {
+    const body = await readJson<{ name?: string; mime?: string }>(req);
+    const rawName = (body.name ?? "").trim();
+    if (!rawName) return json({ error: msg(req, "缺少文件名", "Missing file name") }, 400);
+    const name = sanitizeName(rawName);
+    const st = await storage(env);
+    if (!st.createMultipartUpload) {
+      return json({ error: msg(req, "当前存储后端不支持分片上传", "Current storage backend does not support multipart upload") }, 501);
+    }
+    const id = randomId(14);
+    const key = `files/${id}`;
+    const mime = body.mime || "application/octet-stream";
+    try {
+      const { uploadId } = await st.createMultipartUpload(key, {
+        contentType: mime,
+        contentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      });
+      return json({ ok: true, id, key, uploadId, name, mime });
+    } catch (err) {
+      return json({ error: msg(req, "初始化分片上传失败", "Failed to start multipart upload"), detail: String((err as any)?.message || err) }, 500);
+    }
+  }
+
+  // ② 上传单个分片（原始流式 body，参数走 query）
+  if (path === "/api/admin/upload/multipart/part" && method === "POST") {
+    const key = url.searchParams.get("key") ?? "";
+    const uploadId = url.searchParams.get("uploadId") ?? "";
+    const partNumber = Number(url.searchParams.get("part"));
+    if (!KEY_RE.test(key) || !uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+      return json({ error: msg(req, "分片参数不合法", "Invalid part parameters") }, 400);
+    }
+    if (!req.body) return json({ error: msg(req, "请求体为空", "Empty request body") }, 400);
+    const st = await storage(env);
+    if (!st.uploadPart) {
+      return json({ error: msg(req, "当前存储后端不支持分片上传", "Current storage backend does not support multipart upload") }, 501);
+    }
+    try {
+      const part = await st.uploadPart(key, uploadId, partNumber, req.body);
+      return json({ ok: true, partNumber: part.partNumber, etag: part.etag });
+    } catch (err) {
+      return json({ error: msg(req, "分片上传失败", "Part upload failed"), detail: String((err as any)?.message || err) }, 500);
+    }
+  }
+
+  // ③ 合并分片并写入文件表
+  if (path === "/api/admin/upload/multipart/complete" && method === "POST") {
+    const body = await readJson<{
+      key?: string; uploadId?: string; name?: string; mime?: string;
+      parts?: { partNumber: number; etag: string }[];
+    }>(req);
+    const key = body.key ?? "";
+    const uploadId = body.uploadId ?? "";
+    const parts = Array.isArray(body.parts) ? body.parts : [];
+    const keyMatch = /^files\/([A-Za-z0-9]+)$/.exec(key);
+    if (!keyMatch || !uploadId || !parts.length) {
+      return json({ error: msg(req, "合并参数不合法", "Invalid complete parameters") }, 400);
+    }
+    const st = await storage(env);
+    if (!st.completeMultipartUpload) {
+      return json({ error: msg(req, "当前存储后端不支持分片上传", "Current storage backend does not support multipart upload") }, 501);
+    }
+    const id = keyMatch[1];
+    const name = sanitizeName((body.name ?? "").trim() || "unnamed");
+    const mime = body.mime || "application/octet-stream";
+    let size = 0;
+    try {
+      const res = await st.completeMultipartUpload(key, uploadId, parts);
+      size = res.size;
+    } catch (err) {
+      if (st.abortMultipartUpload) ctx.waitUntil(st.abortMultipartUpload(key, uploadId).catch(() => {}));
+      return json({ error: msg(req, "合并分片失败", "Failed to complete multipart upload"), detail: String((err as any)?.message || err) }, 500);
+    }
+    try {
+      await env.db.prepare(
+        "INSERT INTO files(id, key, name, size, mime, uploaded_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6)"
+      )
+        .bind(id, key, name, size, mime, Date.now())
+        .run();
+    } catch (dbErr) {
+      ctx.waitUntil(st.delete(key).catch(() => {}));
+      console.error("multipart upload: D1 insert failed, cleaned up storage object:", dbErr);
+      return json({ error: msg(req, "数据库写入失败，请重试", "Database write failed. Please retry.") }, 500);
+    }
+    return json({ ok: true, id, name, size }, 201);
+  }
+
+  // ④ 放弃分片上传（前端出错时清理已上传的分片）
+  if (path === "/api/admin/upload/multipart/abort" && method === "POST") {
+    const body = await readJson<{ key?: string; uploadId?: string }>(req);
+    const key = body.key ?? "";
+    const uploadId = body.uploadId ?? "";
+    if (!KEY_RE.test(key) || !uploadId) {
+      return json({ error: msg(req, "参数不合法", "Invalid parameters") }, 400);
+    }
+    const st = await storage(env);
+    try {
+      await st.abortMultipartUpload?.(key, uploadId);
+    } catch {
+      // 中止失败不影响返回
+    }
+    return json({ ok: true });
+  }
+
   // ── 删除文件（连带存储对象、分享、日志） ──────────
   const fileMatch = /^\/api\/admin\/files\/([^/]+)$/.exec(path);
   if (fileMatch && method === "DELETE") {
