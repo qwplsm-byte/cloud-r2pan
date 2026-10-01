@@ -1881,10 +1881,19 @@ async function loadFiles(){
 
 /* 单文件上限：≤100MB 走原有的单请求直传，行为完全不变；
    >100MB 自动切换为分片上传（底层 R2 multipart），每片 64MB，
-   远低于 Workers 请求体上限（Free/Pro 100MB），因此总大小可到 8GB。 */
+   远低于 Workers 请求体上限（Free/Pro 100MB），因此总大小可到 8GB。
+
+   速度优化：分片「并发 + 失败重试」。若 Worker 配了 R2 S3 直传，
+   分片由浏览器直接 PUT 到 R2（不经过 Worker，少一跳、可放心并发），
+   否则回退为「经 Worker 中转分片」。 */
 const UPLOAD_SIMPLE_MAX = 100 * 1024 * 1024;
 const UPLOAD_FILE_MAX   = 8 * 1024 * 1024 * 1024;
 const UPLOAD_CHUNK      = 64 * 1024 * 1024;
+/* 并发分片数：直传时数据直达 R2，可开大些；中转时数据要过 Worker，保守一点 */
+const DIRECT_CONCURRENCY = 4;
+const RELAY_CONCURRENCY  = 3;
+/* 单个分片的最大重试次数（网络抖动/超时很常见，重试能显著提升大文件成功率） */
+const UPLOAD_RETRY = 3;
 
 function makeUploadItem(file){
   const item = document.createElement('div');
@@ -1923,7 +1932,7 @@ function uploadSimple(file, item){
   xhr.send(file);
 }
 
-/* 上传单个分片，返回该分片的 etag */
+/* 经 Worker 中转上传单个分片，返回该分片的 etag */
 function putChunk(key, uploadId, partNumber, blob, onProgress){
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1944,32 +1953,128 @@ function putChunk(key, uploadId, partNumber, blob, onProgress){
   });
 }
 
-/* >100MB：切块逐片上传，最后合并 */
-async function uploadLarge(file, item){
-  let key = '', uploadId = '';
+/* 直传：PUT 单个分片到预签名 URL（浏览器 → R2，不经过 Worker） */
+function putChunkDirect(url, blob, onProgress){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.upload.onprogress = e => onProgress(e.loaded);
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+      ? resolve()
+      : reject(new Error('HTTP ' + xhr.status));
+    xhr.onerror = () => reject(new Error('network'));
+    xhr.send(blob);
+  });
+}
+
+/* 带退避的重试 */
+async function withRetry(fn, attempts){
+  let lastErr;
+  for(let a = 0; a < attempts; a++){
+    try { return await fn(); }
+    catch(err){
+      lastErr = err;
+      if(a < attempts - 1) await new Promise(r => setTimeout(r, 500 * (a + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+/* 简单的并发池：最多 concurrency 个任务同时跑 */
+async function runPool(total, concurrency, worker){
+  let next = 0;
+  const runners = [];
+  for(let i = 0; i < Math.min(concurrency, total); i++){
+    runners.push((async () => {
+      for(;;){
+        const idx = next++;
+        if(idx >= total) break;
+        await worker(idx);
+      }
+    })());
+  }
+  await Promise.all(runners);
+}
+
+/* 跑一轮分片上传；返回是否用了直传。失败时抛错，并在 err.directAttempt 标记本次是否是直传 */
+async function uploadLargeOnce(file, item, forceRelay){
+  let key = '', uploadId = '', direct = false;
   try{
     const mime = file.type || 'application/octet-stream';
-    const init = await api('/api/admin/upload/multipart/init', { method:'POST', body: JSON.stringify({ name: file.name, mime, size: file.size }) });
+    const init = await api('/api/admin/upload/multipart/init' + (forceRelay ? '?relay=1' : ''), { method:'POST', body: JSON.stringify({ name: file.name, mime, size: file.size }) });
     key = init.key; uploadId = init.uploadId;
-    const total = Math.ceil(file.size / UPLOAD_CHUNK);
-    const parts = [];
-    for(let i = 0; i < total; i++){
-      const start = i * UPLOAD_CHUNK;
-      const blob = file.slice(start, Math.min(file.size, start + UPLOAD_CHUNK));
-      const etag = await putChunk(key, uploadId, i + 1, blob, loaded => {
-        setUploadPct(item, Math.min(99, Math.round((start + loaded) / file.size * 100)));
+    direct = init.direct === true;
+
+    const total = Math.ceil(file.size / UPLOAD_CHUNK) || 1;
+    const blobs = i => file.slice(i * UPLOAD_CHUNK, Math.min(file.size, (i + 1) * UPLOAD_CHUNK));
+
+    /* 进度：累计各分片已上传字节 */
+    const loaded = new Array(total).fill(0);
+    const onProgress = (idx, bytes) => {
+      loaded[idx] = bytes;
+      let sum = 0; for(const v of loaded) sum += v;
+      setUploadPct(item, Math.min(99, Math.round(sum / (file.size || 1) * 100)));
+    };
+
+    if(direct){
+      /* ── 直传：一次性批量签发所有分片的预签名 URL，再并发 PUT ── */
+      const nums = Array.from({length: total}, (_, i) => i + 1);
+      const presigned = new Map();
+      for(let i = 0; i < nums.length; i += 500){
+        const res = await api('/api/admin/upload/direct/presign', { method:'POST', body: JSON.stringify({ key, uploadId, parts: nums.slice(i, i + 500) }) });
+        for(const u of (res.urls || [])) presigned.set(u.partNumber, u.url);
+      }
+      await runPool(total, DIRECT_CONCURRENCY, async idx => {
+        const pn = idx + 1;
+        const url = presigned.get(pn);
+        if(!url) throw new Error('missing presigned url');
+        await withRetry(() => putChunkDirect(url, blobs(idx), b => onProgress(idx, b)), UPLOAD_RETRY);
+        onProgress(idx, blobs(idx).size);
       });
-      parts.push({ partNumber: i + 1, etag });
+      /* 直传的 etag 由 Worker 侧向 R2 查询，前端无需回传 */
+      await api('/api/admin/upload/multipart/complete', { method:'POST', body: JSON.stringify({ key, uploadId, name: file.name, mime }) });
+    } else {
+      /* ── 经 Worker 中转分片，同样并发 + 重试 ── */
+      const parts = new Array(total);
+      await runPool(total, RELAY_CONCURRENCY, async idx => {
+        const pn = idx + 1;
+        const etag = await withRetry(() => putChunk(key, uploadId, pn, blobs(idx), b => onProgress(idx, b)), UPLOAD_RETRY);
+        parts[idx] = { partNumber: pn, etag };
+        onProgress(idx, blobs(idx).size);
+      });
+      await api('/api/admin/upload/multipart/complete', { method:'POST', body: JSON.stringify({ key, uploadId, name: file.name, mime, parts }) });
     }
-    await api('/api/admin/upload/multipart/complete', { method:'POST', body: JSON.stringify({ key, uploadId, name: file.name, mime, parts }) });
-    item.querySelector('.pct').textContent = t('uploadDone');
-    toast(t('uploadOk', {name: file.name}));
-    loadFiles();
+    return direct;
   }catch(err){
     if(key && uploadId){ try{ await api('/api/admin/upload/multipart/abort', { method:'POST', body: JSON.stringify({ key, uploadId }) }); }catch(e){} }
-    item.querySelector('.pct').textContent = t('uploadFailShort');
-    toast(t('uploadFail', {name: file.name}), 'err');
+    err.directAttempt = direct;
+    throw err;
   }
+}
+
+/* >100MB：切块并发上传。先试直传；直传失败（多数是 R2 桶没配 CORS）
+   则自动回退为经 Worker 中转再跑一遍，保证仍能传成功。 */
+async function uploadLarge(file, item){
+  try{
+    await uploadLargeOnce(file, item, false);
+  }catch(err){
+    if(err && err.directAttempt){
+      try{
+        await uploadLargeOnce(file, item, true);
+      }catch(err2){
+        item.querySelector('.pct').textContent = t('uploadFailShort');
+        toast(t('uploadFail', {name: file.name}), 'err');
+        return;
+      }
+    } else {
+      item.querySelector('.pct').textContent = t('uploadFailShort');
+      toast(t('uploadFail', {name: file.name}), 'err');
+      return;
+    }
+  }
+  item.querySelector('.pct').textContent = t('uploadDone');
+  toast(t('uploadOk', {name: file.name}));
+  loadFiles();
 }
 
 /* ═══════════ 创建分享弹窗 ═══════════ */

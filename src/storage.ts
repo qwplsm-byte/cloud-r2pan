@@ -202,6 +202,19 @@ function encodeURIComponentStrict(s: string): string {
     .replace(/\*/g, "%2A");
 }
 
+/**
+ * 严格序列化 query string（AWS SigV4 用）。
+ * 规则：按「已编码的 key」做码点升序排序；key / value 都用 RFC3986 严格编码。
+ * 注意不能用 localeCompare —— 它是语言相关的，会得到与 AWS 不一致的顺序。
+ */
+function strictQueryString(query: URLSearchParams | undefined): string {
+  if (!query) return "";
+  const pairs: [string, string][] = [];
+  query.forEach((v, k) => pairs.push([encodeURIComponentStrict(k), encodeURIComponentStrict(v)]));
+  pairs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  return pairs.map(([k, v]) => `${k}=${v}`).join("&");
+}
+
 /** 生成规范化请求（Canonical Request）—— AWS Signature V4 的核心 */
 function buildCanonicalRequest(
   method: string,
@@ -210,29 +223,20 @@ function buildCanonicalRequest(
   headers: Record<string, string>,
   bodyHash: string
 ): { canonical: string; signedHeaders: string } {
-  const sortedHeaderNames = Object.keys(headers)
-    .map((k) => k.toLowerCase())
-    .sort();
+  // 头名统一小写后再排序；用一张小写键的表做不区分大小写的取值，
+  // 否则 "Content-Type" 这类大写开头的头会取不到值（SigV4 要求头名小写）。
+  const lowerHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) lowerHeaders[k.toLowerCase()] = v.trim();
+
+  const sortedHeaderNames = Object.keys(lowerHeaders).sort();
   const signedHeaders = sortedHeaderNames.join(";");
 
-  const headerLines = sortedHeaderNames.map((name) => `${name}:${headers[name.trim()]!.trim()}\n`).join("");
-
-  // 规范化 query string
-  let canonicalQuery = "";
-  if (query) {
-    const pairs: [string, string][] = [];
-    query.forEach((v, k) => pairs.push([k, v]));
-    pairs.sort((a, b) =>
-      a[0] === b[0] ? encodeURIComponentStrict(a[1]).localeCompare(encodeURIComponentStrict(b[1]))
-        : encodeURIComponentStrict(a[0]).localeCompare(encodeURIComponentStrict(b[0]))
-    );
-    canonicalQuery = pairs.map(([k, v]) => `${encodeURIComponentStrict(k)}=${encodeURIComponentStrict(v)}`).join("&");
-  }
+  const headerLines = sortedHeaderNames.map((name) => `${name}:${lowerHeaders[name]}\n`).join("");
 
   const canonical = [
     method,
     path,
-    canonicalQuery,
+    strictQueryString(query),
     headerLines,
     signedHeaders,
     bodyHash,
@@ -329,8 +333,11 @@ async function signS3Request(
   now: Date
 ): Promise<{ url: string; headers: Record<string, string> }> {
   const host = new URL(cfg.endpoint).hostname;
-  const dateStamp = now.toISOString().slice(0, 10);
-  const amzDate = now.toISOString().replace(/[-:]/g, "").slice(0, 19) + "Z"; // 20260914T120000Z
+  // SigV4 的 credential scope 日期必须是紧凑的 YYYYMMDD（不能带短横线），
+  // 否则 R2/S3 会报 "Credential signed date ... does not match x-amz-date"。
+  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
+  // 一次性去掉 "-"、":" 和毫秒 ".mmm"，得到标准的 20260914T120000Z
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
 
   // 构造 URL
   const baseUrl = cfg.endpoint.replace(/\/$/, "");
@@ -365,8 +372,8 @@ async function signS3Request(
     `AWS4-HMAC-SHA256 Credential=${cfg.accessKeyId}/${credentialScope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-  // 把 query 也拼进 url
-  if (query) url += `?${query.toString()}`;
+  // 把 query 也拼进 url（用与签名一致的严格编码/排序）
+  if (query) url += `?${strictQueryString(query)}`;
 
   return { url, headers };
 }
@@ -832,4 +839,215 @@ export async function createStorageProvider(
   // ③ 默认 R2
   if (!env.r2) throw new Error("Storage: no R2 binding and S3/WebDAV not configured");
   return createR2Provider(env.r2);
+}
+
+/* ═══════════════════════════════════════════════════════
+ * R2 S3 直传（presigned URL）
+ *
+ * 让浏览器把分片直接 PUT 到 R2 的 S3 端点，数据不再经过 Worker：
+ *   - 少一跳（浏览器 → R2，而不是 浏览器 → Worker → R2）
+ *   - Worker 不占 CPU / 内存，浏览器侧可以放心并发
+ *   - 彻底摆脱 Workers 的请求体上限，分片大小不受 100MB 约束
+ *
+ * 仅在 env 里配了 r2_s3_endpoint / r2_s3_access_key_id / r2_s3_secret_access_key
+ * 时可用；否则调用方回退到"经 Worker 中转分片"的方式。
+ *
+ * 注意：密钥只存在于 Worker（env secret），前端拿到的是**预签名 URL**，
+ * 不接触任何凭据。
+ * ═══════════════════════════════════════════════════════ */
+
+export interface DirectUploadConfig {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+}
+
+/** 读取直传配置；缺任意一项就返回 null（表示未启用直传） */
+export function directUploadConfig(env: Env): DirectUploadConfig | null {
+  const endpoint = env.r2_s3_endpoint;
+  const accessKeyId = env.r2_s3_access_key_id;
+  const secretAccessKey = env.r2_s3_secret_access_key;
+  if (!endpoint || !accessKeyId || !secretAccessKey) return null;
+  return {
+    endpoint: endpoint.replace(/\/+$/, ""),
+    region: "auto", // R2 的 SigV4 固定用 auto
+    bucket: env.r2_s3_bucket || "cloud-r2pan",
+    accessKeyId,
+    secretAccessKey,
+  };
+}
+
+function directS3Config(cfg: DirectUploadConfig): S3Config {
+  return {
+    endpoint: cfg.endpoint,
+    region: cfg.region,
+    bucket: cfg.bucket,
+    accessKeyId: cfg.accessKeyId,
+    secretAccessKey: cfg.secretAccessKey,
+    addressingStyle: "path",
+  };
+}
+
+/** path-style 路径：/{bucket}/{key} */
+function directPath(cfg: DirectUploadConfig, key: string): string {
+  return `/${cfg.bucket}/${key.split("/").map(encodeURIComponentStrict).join("/")}`;
+}
+
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+/** 还原 XML 实体（S3 返回的 ETag 里带 &quot; 等） */
+function xmlUnescape(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/** 转义 XML 实体（写回 CompleteMultipartUpload 请求体时用） */
+function xmlEscape(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/** 带 SigV4 头调用 S3 API（只有控制面，不含数据面） */
+async function directRequest(
+  cfg: DirectUploadConfig,
+  method: string,
+  key: string,
+  query: URLSearchParams | undefined,
+  opts?: { body?: string; headers?: Record<string, string> }
+): Promise<Response> {
+  const headers: Record<string, string> = { ...(opts?.headers || {}) };
+  const body = opts?.body;
+  const bodyHash = body !== undefined ? await sha256Hex(body) : EMPTY_SHA256;
+  const { url, headers: signed } = await signS3Request(
+    directS3Config(cfg),
+    method,
+    key,
+    query,
+    headers,
+    bodyHash,
+    new Date()
+  );
+  return fetch(url, { method, headers: signed, body });
+}
+
+/** ① 创建 multipart，返回 uploadId */
+export async function directCreateMultipart(
+  cfg: DirectUploadConfig,
+  key: string,
+  opts: { contentType?: string; contentDisposition?: string }
+): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (opts.contentType) headers["Content-Type"] = opts.contentType;
+  if (opts.contentDisposition) headers["Content-Disposition"] = opts.contentDisposition;
+  const resp = await directRequest(cfg, "POST", key, new URLSearchParams({ uploads: "" }), { headers });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`CreateMultipartUpload failed: ${resp.status} ${text.slice(0, 300)}`);
+  const m = text.match(/<UploadId>([^<]+)<\/UploadId>/);
+  if (!m) throw new Error(`CreateMultipartUpload: no UploadId in response: ${text.slice(0, 300)}`);
+  return m[1]!;
+}
+
+/**
+ * ② 为某个分片生成预签名 PUT URL。
+ * 浏览器直接 PUT 这个 URL 即可上传该分片，无需任何凭据。
+ */
+export async function presignUploadPart(
+  cfg: DirectUploadConfig,
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  expiresSeconds = 86400
+): Promise<string> {
+  const path = directPath(cfg, key);
+  const now = new Date();
+  const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const credentialScope = `${dateStamp}/${cfg.region}/s3/aws4_request`;
+
+  const query = new URLSearchParams();
+  query.set("partNumber", String(partNumber));
+  query.set("uploadId", uploadId);
+  query.set("X-Amz-Algorithm", "AWS4-HMAC-SHA256");
+  query.set("X-Amz-Credential", `${cfg.accessKeyId}/${credentialScope}`);
+  query.set("X-Amz-Date", amzDate);
+  query.set("X-Amz-Expires", String(expiresSeconds));
+  query.set("X-Amz-SignedHeaders", "host");
+
+  const host = new URL(cfg.endpoint).hostname;
+  // 预签名 URL 用 query 鉴权，payload 走 UNSIGNED-PAYLOAD（AWS 预签名标准做法）
+  const { canonical } = buildCanonicalRequest("PUT", path, query, { host }, "UNSIGNED-PAYLOAD");
+  const canonicalHash = await sha256Hex(canonical);
+  const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${canonicalHash}`;
+  const signingKey = await deriveSigningKey(cfg.secretAccessKey, dateStamp, cfg.region);
+  const signature = bufToHex(await hmacSha256(signingKey, stringToSign));
+  query.set("X-Amz-Signature", signature);
+
+  return `${cfg.endpoint}${path}?${strictQueryString(query)}`;
+}
+
+/** ③ 列出已上传的分片（Worker 侧调用，拿权威 etag 列表，不依赖浏览器读响应头） */
+export async function directListParts(
+  cfg: DirectUploadConfig,
+  key: string,
+  uploadId: string
+): Promise<{ partNumber: number; etag: string }[]> {
+  const resp = await directRequest(cfg, "GET", key, new URLSearchParams({ uploadId }));
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`ListParts failed: ${resp.status} ${text.slice(0, 300)}`);
+  const parts: { partNumber: number; etag: string }[] = [];
+  const re = /<Part>([\s\S]*?)<\/Part>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const pn = m[1]!.match(/<PartNumber>(\d+)<\/PartNumber>/);
+    const et = m[1]!.match(/<ETag>([^<]*)<\/ETag>/);
+    if (pn && et) parts.push({ partNumber: parseInt(pn[1]!, 10), etag: xmlUnescape(et[1]!.trim()) });
+  }
+  return parts.sort((a, b) => a.partNumber - b.partNumber);
+}
+
+/** ④ 合并分片 */
+export async function directCompleteMultipart(
+  cfg: DirectUploadConfig,
+  key: string,
+  uploadId: string,
+  parts: { partNumber: number; etag: string }[]
+): Promise<void> {
+  const xml =
+    "<CompleteMultipartUpload>" +
+    parts
+      .map((p) => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${xmlEscape(p.etag)}</ETag></Part>`)
+      .join("") +
+    "</CompleteMultipartUpload>";
+  const resp = await directRequest(cfg, "POST", key, new URLSearchParams({ uploadId }), { body: xml });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`CompleteMultipartUpload failed: ${resp.status} ${text.slice(0, 300)}`);
+  // S3 有时会返回 200 但 body 里带 <Error>
+  if (/<Error>/.test(text)) throw new Error(`CompleteMultipartUpload error: ${text.slice(0, 300)}`);
+}
+
+/** ⑤ 放弃 multipart */
+export async function directAbortMultipart(
+  cfg: DirectUploadConfig,
+  key: string,
+  uploadId: string
+): Promise<void> {
+  await directRequest(cfg, "DELETE", key, new URLSearchParams({ uploadId }));
+}
+
+/** 读取对象大小（合并后校验用） */
+export async function directHeadSize(cfg: DirectUploadConfig, key: string): Promise<number | null> {
+  const resp = await directRequest(cfg, "HEAD", key, undefined);
+  if (!resp.ok) return null;
+  const len = resp.headers.get("content-length");
+  return len ? parseInt(len, 10) : null;
 }

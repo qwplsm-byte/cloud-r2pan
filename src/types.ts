@@ -14,6 +14,17 @@ export interface Env {
    * 没绑定时全球分布 Tab 会降级使用 D1 的 download_logs（只存 country，无经纬度）。
    */
   analytics?: AnalyticsEngineDataset;
+  /* ── 可选：R2 S3 直传（presigned URL）─────────────────
+   * 配上这三项后，浏览器可以把分片直接 PUT 到 R2 的 S3 端点，
+   * 数据不再经过 Worker：少一跳、Worker 不占 CPU/内存，
+   * 且不再受 Workers 请求体上限约束。
+   * 没配则自动回退到"经 Worker 中转分片"的原有方式。
+   */
+  r2_s3_endpoint?: string;
+  r2_s3_access_key_id?: string;
+  r2_s3_secret_access_key?: string;
+  /** 可选：直传目标桶名，默认 "cloud-r2pan" */
+  r2_s3_bucket?: string;
 }
 
 export interface ShareRow {

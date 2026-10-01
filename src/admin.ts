@@ -8,6 +8,15 @@ import { hashPassword } from "./public";
 import { parseUA } from "./ua";
 import { encryptSecret, decryptSecret, totpGenerateSecret, totpVerify, totpUri, totpGenerateRecoveryCodes, sha256Hex, safeEqual } from "./crypto";
 import { createStorageProvider, type StorageProvider } from "./storage";
+import {
+  directUploadConfig,
+  directCreateMultipart,
+  presignUploadPart,
+  directListParts,
+  directCompleteMultipart,
+  directAbortMultipart,
+  type DirectUploadConfig,
+} from "./storage";
 
 /** 懒加载 StorageProvider —— 每次需要时从 settings 构造（settings 有 5s 缓存，成本低） */
 let _storagePromise: Promise<StorageProvider> | null = null;
@@ -19,6 +28,17 @@ async function storage(env: Env): Promise<StorageProvider> {
     })();
   }
   return _storagePromise;
+}
+
+/**
+ * 解析 R2 S3 直传配置。
+ * 只有当前存储后端就是 R2、且 env 里配齐了 S3 凭据时才启用；
+ * 返回 null 表示回退到「经 Worker 中转分片」的原有方式。
+ */
+async function directUpload(env: Env): Promise<DirectUploadConfig | null> {
+  const st = await storage(env);
+  if (st.kind !== "r2") return null;
+  return directUploadConfig(env);
 }
 
 const json = (data: unknown, status = 200) =>
@@ -360,26 +380,67 @@ export async function handleAdminApi(
   const KEY_RE = /^files\/[A-Za-z0-9]+$/;
 
   // ① 初始化分片上传
+  //    如果配了 R2 S3 直传，则直接向 R2 的 S3 端点建 multipart，
+  //    返回 direct:true，前端随后走 /direct/presign 拿预签名 URL 自行 PUT。
   if (path === "/api/admin/upload/multipart/init" && method === "POST") {
     const body = await readJson<{ name?: string; mime?: string }>(req);
     const rawName = (body.name ?? "").trim();
     if (!rawName) return json({ error: msg(req, "缺少文件名", "Missing file name") }, 400);
     const name = sanitizeName(rawName);
+    const id = randomId(14);
+    const key = `files/${id}`;
+    const mime = body.mime || "application/octet-stream";
+    const meta = {
+      contentType: mime,
+      contentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    };
+    // ── 直传优先（?relay=1 可强制回退到经 Worker 中转，供前端直传失败后重试）──
+    const directCfg = url.searchParams.get("relay") === "1" ? null : await directUpload(env);
+    if (directCfg) {
+      try {
+        const uploadId = await directCreateMultipart(directCfg, key, meta);
+        return json({ ok: true, id, key, uploadId, name, mime, direct: true });
+      } catch (err) {
+        console.error("direct multipart init failed, falling back to worker relay:", err);
+      }
+    }
     const st = await storage(env);
     if (!st.createMultipartUpload) {
       return json({ error: msg(req, "当前存储后端不支持分片上传", "Current storage backend does not support multipart upload") }, 501);
     }
-    const id = randomId(14);
-    const key = `files/${id}`;
-    const mime = body.mime || "application/octet-stream";
     try {
-      const { uploadId } = await st.createMultipartUpload(key, {
-        contentType: mime,
-        contentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
-      });
-      return json({ ok: true, id, key, uploadId, name, mime });
+      const { uploadId } = await st.createMultipartUpload(key, meta);
+      return json({ ok: true, id, key, uploadId, name, mime, direct: false });
     } catch (err) {
       return json({ error: msg(req, "初始化分片上传失败", "Failed to start multipart upload"), detail: String((err as any)?.message || err) }, 500);
+    }
+  }
+
+  // ①.b 直传：批量签发分片预签名 PUT URL（浏览器拿 URL 直接 PUT，不经过 Worker）
+  if (path === "/api/admin/upload/direct/presign" && method === "POST") {
+    const body = await readJson<{ key?: string; uploadId?: string; parts?: number[] }>(req);
+    const key = body.key ?? "";
+    const uploadId = body.uploadId ?? "";
+    const parts = Array.isArray(body.parts) ? body.parts : [];
+    if (!KEY_RE.test(key) || !uploadId || !parts.length || parts.length > 1000) {
+      return json({ error: msg(req, "预签名参数不合法", "Invalid presign parameters") }, 400);
+    }
+    for (const p of parts) {
+      if (!Number.isInteger(p) || p < 1 || p > 10000) {
+        return json({ error: msg(req, "分片号不合法", "Invalid part number") }, 400);
+      }
+    }
+    const directCfg = await directUpload(env);
+    if (!directCfg) {
+      return json({ error: msg(req, "未启用 R2 直传", "R2 direct upload is not enabled") }, 501);
+    }
+    try {
+      const urls = await Promise.all(
+        parts.map(async (p) => ({ partNumber: p, url: await presignUploadPart(directCfg, key, uploadId, p) }))
+      );
+      return json({ ok: true, urls });
+    } catch (err) {
+      return json({ error: msg(req, "生成预签名 URL 失败", "Failed to presign URLs"), detail: String((err as any)?.message || err) }, 500);
     }
   }
 
@@ -414,16 +475,54 @@ export async function handleAdminApi(
     const uploadId = body.uploadId ?? "";
     const parts = Array.isArray(body.parts) ? body.parts : [];
     const keyMatch = /^files\/([A-Za-z0-9]+)$/.exec(key);
-    if (!keyMatch || !uploadId || !parts.length) {
+    if (!keyMatch || !uploadId) {
+      return json({ error: msg(req, "合并参数不合法", "Invalid complete parameters") }, 400);
+    }
+    const id = keyMatch[1];
+    const name = sanitizeName((body.name ?? "").trim() || "unnamed");
+    const mime = body.mime || "application/octet-stream";
+
+    // ── 直传：由 Worker 向 R2 查权威分片列表后合并，不信任前端传来的 etag ──
+    const directCfg = await directUpload(env);
+    if (directCfg) {
+      try {
+        const listed = await directListParts(directCfg, key, uploadId);
+        if (!listed.length) {
+          return json({ error: msg(req, "没有已上传的分片", "No uploaded parts found") }, 400);
+        }
+        await directCompleteMultipart(directCfg, key, uploadId, listed);
+      } catch (err) {
+        ctx.waitUntil(directAbortMultipart(directCfg, key, uploadId).catch(() => {}));
+        return json({ error: msg(req, "合并分片失败", "Failed to complete multipart upload"), detail: String((err as any)?.message || err) }, 500);
+      }
+      // 合并后用 head 拿最终大小
+      let size = 0;
+      try {
+        const st = await storage(env);
+        const head = await st.head(key);
+        size = head?.size ?? 0;
+      } catch { /* 拿不到大小不致命 */ }
+      try {
+        await env.db.prepare(
+          "INSERT INTO files(id, key, name, size, mime, uploaded_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6)"
+        )
+          .bind(id, key, name, size, mime, Date.now())
+          .run();
+      } catch (dbErr) {
+        ctx.waitUntil(storage(env).then((st) => st.delete(key)).catch(() => {}));
+        console.error("direct upload: D1 insert failed, cleaned up storage object:", dbErr);
+        return json({ error: msg(req, "数据库写入失败，请重试", "Database write failed. Please retry.") }, 500);
+      }
+      return json({ ok: true, id, name, size }, 201);
+    }
+
+    if (!parts.length) {
       return json({ error: msg(req, "合并参数不合法", "Invalid complete parameters") }, 400);
     }
     const st = await storage(env);
     if (!st.completeMultipartUpload) {
       return json({ error: msg(req, "当前存储后端不支持分片上传", "Current storage backend does not support multipart upload") }, 501);
     }
-    const id = keyMatch[1];
-    const name = sanitizeName((body.name ?? "").trim() || "unnamed");
-    const mime = body.mime || "application/octet-stream";
     let size = 0;
     try {
       const res = await st.completeMultipartUpload(key, uploadId, parts);
@@ -453,6 +552,15 @@ export async function handleAdminApi(
     const uploadId = body.uploadId ?? "";
     if (!KEY_RE.test(key) || !uploadId) {
       return json({ error: msg(req, "参数不合法", "Invalid parameters") }, 400);
+    }
+    const directCfg = await directUpload(env);
+    if (directCfg) {
+      try {
+        await directAbortMultipart(directCfg, key, uploadId);
+      } catch {
+        // 中止失败不影响返回
+      }
+      return json({ ok: true });
     }
     const st = await storage(env);
     try {
