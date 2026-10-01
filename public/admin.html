@@ -3481,6 +3481,30 @@ async function loadSettings(){
         <button class="btn sm" id="st-backend-webdav-cfg" style="${(s.storage_provider||'r2')==='webdav' ? '' : 'opacity:.5'}">🔗 ${esc(t('storageBackendConfig'))} WebDAV</button>
       </div>
     </div>
+    <!-- R2 直传（上传加速） -->
+    <div class="glass group">
+      <div class="row" style="align-items:flex-start">
+        <div class="info" style="flex:1">
+          <div class="t">⚡ ${LANG==='zh'?'R2 直传（上传加速）':'R2 Direct Upload'}</div>
+          <div class="d" style="font-size:12px;line-height:1.6;margin-top:2px">${LANG==='zh'
+            ? '开启后，超过 100MB 的文件分片由浏览器直接上传到 R2，不再经过 Worker —— 少一跳、更快。未配置时大文件仍可上传，只是会经过 Worker 中转。'
+            : 'Once enabled, parts of files over 100MB are uploaded straight to R2 from the browser, skipping the Worker. Without it large files still work, just relayed through the Worker.'}</div>
+        </div>
+        ${s.r2_direct_enabled
+          ? `<span class="tag active"><i></i>${LANG==='zh'?'已启用':'Enabled'}</span>`
+          : `<span class="tag" style="background:var(--sf-input);color:var(--text-3)"><i></i>${LANG==='zh'?'未启用':'Off'}</span>`}
+      </div>
+      <div style="font-size:12px;line-height:1.7;margin-top:10px">
+        ${(s.storage_provider||'r2')!=='r2'
+          ? `<span style="color:#fda293">⚠ ${LANG==='zh'?'仅当存储后端为 R2 时可用':'Only available when storage backend is R2'}</span>`
+          : (s.r2_direct_enabled
+              ? `<span style="color:#6ee7b7">✓ ${esc(s.r2_direct_endpoint||'')} · ${esc(s.r2_direct_bucket||'cloud-r2pan')}</span>`
+              : `<span style="color:var(--text-3)">${LANG==='zh'?'未配置（大文件走 Worker 中转，仍可用）':'Not configured (large files relay through the Worker)'}</span>`)}
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:10px;gap:8px">
+        <button class="btn sm" id="r2-direct-cfg">⚙️ ${LANG==='zh'?'配置':'Configure'}</button>
+      </div>
+    </div>
     <!-- 数据库健康 -->
     <div class="glass group">
       <div class="row" style="align-items:flex-start">
@@ -3680,6 +3704,136 @@ async function loadSettings(){
       closeModal();
       toast(t('saved'));
       loadSettings();
+    });
+  });
+
+  // ═══════════════════════════════════
+  // R2 直传（上传加速）配置 Modal
+  // ═══════════════════════════════════
+  $('#r2-direct-cfg')?.addEventListener('click', async () => {
+    const s = await api('/api/admin/settings');
+    const zh = LANG === 'zh';
+    const mono = "width:100%;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace";
+    openModal(`
+      <h3>⚡ ${zh?'R2 直传（上传加速）':'R2 Direct Upload'}</h3>
+      <div class="sub" style="font-size:12.5px;line-height:1.6">
+        ${zh
+          ? '大文件（>100MB）分片将由浏览器直接上传到 R2，速度更快。<br>先去 R2 控制台创建 API Token（权限：该桶的 Object Read &amp; Write），再填入下面三项。'
+          : 'Parts of large files (>100MB) upload straight to R2 for higher speed.<br>Create an R2 API Token (Object Read &amp; Write on the bucket) first, then fill in the three fields below.'}
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>Endpoint</label>
+        <input type="text" id="rd-endpoint" value="${esc(s.r2_direct_endpoint ?? '')}" placeholder="https://<ACCOUNT_ID>.r2.cloudflarestorage.com" style="${mono}">
+      </div>
+      <div class="field">
+        <label>Access Key ID</label>
+        <input type="text" id="rd-ak" value="${esc(s.r2_direct_access_key_id ?? '')}" placeholder="a1b2c3..." style="${mono}">
+      </div>
+      <div class="field">
+        <label>Secret Access Key</label>
+        <input type="password" id="rd-sk" value="" placeholder="${s.r2_direct_secret_configured ? (zh?'已设置，留空保持不变':'Already set — leave blank to keep') : ''}" style="${mono}">
+        <div class="tip" style="line-height:1.6;margin-top:4px">
+          ${s.r2_direct_secret_configured
+            ? `<span style="color:#6ee7b7">✓ ${zh?'已设置':'Set'}</span>`
+            : `<span style="color:#fda293">⚠ ${zh?'未设置':'Not set'}</span>`}
+          — ${zh?'留空表示保持原值不变':'Leave blank to keep the current value'}
+        </div>
+      </div>
+      <div class="field">
+        <label>Bucket</label>
+        <input type="text" id="rd-bucket" value="${esc(s.r2_direct_bucket ?? 'cloud-r2pan')}" placeholder="cloud-r2pan" style="${mono}">
+      </div>
+      <div class="field" style="margin-top:4px">
+        <button class="btn sm" id="rd-test" style="padding:8px 16px;font-size:12.5px;border-radius:12px">🧪 ${zh?'测试直传':'Test'}</button>
+        <span id="rd-test-result" style="margin-left:10px;font-size:12.5px;color:var(--text-3);line-height:1.5"></span>
+      </div>
+      <div class="actions" style="margin-top:18px">
+        <button class="btn" id="rd-off" style="margin-right:auto;color:#fda293">${zh?'关闭直传':'Disable'}</button>
+        <button class="btn" data-x>${esc(t('cancel'))}</button>
+        <button class="btn primary" id="rd-save">${esc(t('save'))}</button>
+      </div>
+    `);
+    $('[data-x]')?.addEventListener('click', closeModal);
+
+    $('#rd-off')?.addEventListener('click', async () => {
+      try {
+        await api('/api/admin/settings', { method:'PUT', body: JSON.stringify({ r2_direct_endpoint: '', r2_direct_access_key_id: '', r2_direct_secret: '' }) });
+        closeModal();
+        toast(t('saved'));
+        loadSettings();
+      } catch (e) {
+        toast(e?.message || String(e), 'err');
+      }
+    });
+
+    const collect = () => {
+      const o = {
+        endpoint: $('#rd-endpoint').value.trim(),
+        access_key_id: $('#rd-ak').value.trim(),
+        bucket: $('#rd-bucket').value.trim(),
+      };
+      const sec = $('#rd-sk').value.trim();
+      if (sec) o.secret = sec;
+      return o;
+    };
+    const postJson = async (url, payload) => {
+      const r = await fetch(url, { method:'POST', credentials:'same-origin', headers:{'content-type':'application/json'}, body: JSON.stringify(payload) });
+      let d = {}; try { d = await r.json(); } catch {}
+      return { status: r.status, ok: r.ok, data: d };
+    };
+
+    // 完整走一遍：Worker 建 multipart+签发 URL → 浏览器直传分片（这一步才能验证 CORS）→ Worker 合并校验
+    $('#rd-test')?.addEventListener('click', async () => {
+      const result = $('#rd-test-result');
+      const set = (msg, color) => { result.innerHTML = msg; result.style.color = color; };
+      const payload = collect();
+      if (!payload.endpoint || !payload.access_key_id) {
+        set(zh?'✗ 请先填写 Endpoint 和 Access Key ID':'✗ Endpoint and Access Key ID required', '#fda293'); return;
+      }
+      set('…', 'var(--text-3)');
+      try {
+        const r1 = await postJson('/api/admin/storage/test-direct', payload);
+        if (!r1.data?.ok) {
+          set('✗ ' + esc(r1.data?.message || r1.data?.error || ('HTTP ' + r1.status)), '#fda293'); return;
+        }
+        // 浏览器直接 PUT 到预签名 URL
+        let putErr = '';
+        try {
+          const pr = await fetch(r1.data.url, { method:'PUT', body: new Blob(['cloud-r2pan direct upload test'], { type:'application/octet-stream' }) });
+          if (!pr.ok) putErr = 'HTTP ' + pr.status;
+        } catch (e) { putErr = e?.message || String(e); }
+        if (putErr) {
+          set(`✗ ${zh?'分片 PUT 失败':'Part PUT failed'}: ${esc(putErr)}<br><span style="color:var(--text-3)">${zh?'多半是 R2 桶未配置允许本站源跨域 PUT 的 CORS 规则':'Likely the R2 bucket CORS rule for this origin is missing'}</span>`, '#fda293');
+          return;
+        }
+        const r2 = await postJson('/api/admin/storage/test-direct/verify', { ...payload, key: r1.data.key, uploadId: r1.data.uploadId });
+        if (r2.data?.ok) {
+          set(`✓ ${zh?'直传可用':'Direct upload works'}（${r2.data.size} bytes）`, '#6ee7b7');
+        } else {
+          set('✗ ' + esc(r2.data?.message || r2.data?.error || ('HTTP ' + r2.status)), '#fda293');
+        }
+      } catch (e) {
+        set('✗ ' + esc(e?.message || String(e)), '#fda293');
+      }
+    });
+
+    $('#rd-save')?.addEventListener('click', async () => {
+      const payload = collect();
+      const body = {
+        r2_direct_endpoint: payload.endpoint,
+        r2_direct_access_key_id: payload.access_key_id,
+        r2_direct_bucket: payload.bucket,
+        // 未填则保留原值
+        r2_direct_secret: payload.secret ?? '__keep__',
+      };
+      try {
+        await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });
+        closeModal();
+        toast(t('saved'));
+        loadSettings();
+      } catch (e) {
+        toast(e?.message || String(e), 'err');
+      }
     });
   });
 

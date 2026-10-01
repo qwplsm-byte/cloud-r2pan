@@ -134,6 +134,23 @@ export interface Settings {
   /** WebDAV 可访问的根目录（默认 "/" = 全部文件；可设 "/shared" 等限制范围） */
   webdavRootPath: string;
 
+  // ═══════ R2 S3 直传（上传加速） ═══════
+  /**
+   * 可选：开启后，>100MB 的大文件分片由浏览器直接 PUT 到 R2 的 S3 端点，
+   * 不再经过 Worker —— 少一跳、Worker 不占 CPU/内存，上传更快。
+   * 需要同时满足：存储后端为 R2、且下面三项都填了、且 R2 桶配了允许本站
+   * 源跨域 PUT 的 CORS 规则。任一项不满足会自动回退到经 Worker 中转。
+   * 也可以改用 Worker Secret（r2_s3_endpoint 等）配置，这边留空即可。
+   */
+  /** R2 S3 端点，形如 https://<账号ID>.r2.cloudflarestorage.com */
+  r2DirectEndpoint: string | null;
+  /** R2 API Token 的 Access Key ID（明文存） */
+  r2DirectAccessKeyId: string | null;
+  /** R2 API Token 的 Secret Access Key —— 用 admin AES-GCM 加密后存 */
+  r2DirectSecretCipher: string | null;
+  /** 直传目标桶名，默认 cloud-r2pan */
+  r2DirectBucket: string | null;
+
   // ═══════ UI 主题 ═══════
   /** 管理后台 UI 主题："light"（默认白色 Apple 风格）或 "dark"（深色原风格） */
   uiTheme: "light" | "dark";
@@ -188,6 +205,11 @@ export const DEFAULT_SETTINGS: Settings = {
   webdavUsername: "webdav",
   webdavPasswordHash: null,
   webdavRootPath: "/",
+  // R2 S3 直传 —— 默认未配置（未配置时自动走经 Worker 中转）
+  r2DirectEndpoint: null,
+  r2DirectAccessKeyId: null,
+  r2DirectSecretCipher: null,
+  r2DirectBucket: "cloud-r2pan",
   // UI 主题 —— 默认白色 Apple 风格
   uiTheme: "light",
 };
@@ -270,6 +292,11 @@ export async function getSettings(env: Env): Promise<Settings> {
     webdavUsername: map.get("webdav_username") ?? DEFAULT_SETTINGS.webdavUsername,
     webdavPasswordHash: map.get("webdav_password_hash") ?? null,
     webdavRootPath: map.get("webdav_root_path") ?? DEFAULT_SETTINGS.webdavRootPath,
+    // R2 S3 直传
+    r2DirectEndpoint: map.get("r2_direct_endpoint") ?? null,
+    r2DirectAccessKeyId: map.get("r2_direct_access_key_id") ?? null,
+    r2DirectSecretCipher: map.get("r2_direct_secret_cipher") ?? null,
+    r2DirectBucket: map.get("r2_direct_bucket") ?? DEFAULT_SETTINGS.r2DirectBucket,
     // UI 主题
     uiTheme: (map.get("ui_theme") ?? DEFAULT_SETTINGS.uiTheme) as Settings["uiTheme"],
   };

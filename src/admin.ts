@@ -32,13 +32,55 @@ async function storage(env: Env): Promise<StorageProvider> {
 
 /**
  * 解析 R2 S3 直传配置。
- * 只有当前存储后端就是 R2、且 env 里配齐了 S3 凭据时才启用；
- * 返回 null 表示回退到「经 Worker 中转分片」的原有方式。
+ * 只有当前存储后端就是 R2，且凭据齐全时才启用；返回 null 表示回退到
+ * 「经 Worker 中转分片」的原有方式。
+ * 取值优先级：后台设置（可网页随时改/轮换）> Worker Secret。
  */
 async function directUpload(env: Env): Promise<DirectUploadConfig | null> {
   const st = await storage(env);
   if (st.kind !== "r2") return null;
+
+  // ① 后台设置
+  const s = await getSettings(env);
+  if (s.r2DirectEndpoint && s.r2DirectAccessKeyId && s.r2DirectSecretCipher) {
+    const secret = await decryptSecret(s.r2DirectSecretCipher, env.admin);
+    if (secret) {
+      return {
+        endpoint: s.r2DirectEndpoint.replace(/\/+$/, ""),
+        region: "auto",
+        bucket: s.r2DirectBucket || env.r2_s3_bucket || "cloud-r2pan",
+        accessKeyId: s.r2DirectAccessKeyId,
+        secretAccessKey: secret,
+      };
+    }
+  }
+
+  // ② 回退到 Worker Secret
   return directUploadConfig(env);
+}
+
+/**
+ * 给「测试直传」用：允许用请求里临时传的凭据覆盖已存值（方便填完表单先测再存）。
+ * 优先级：请求体 > 后台设置 > Worker Secret。
+ */
+async function resolveDirectCfg(
+  env: Env,
+  body: { endpoint?: string; access_key_id?: string; secret?: string; bucket?: string }
+): Promise<DirectUploadConfig | null> {
+  const s = await getSettings(env);
+  const endpoint = (body.endpoint ?? s.r2DirectEndpoint ?? env.r2_s3_endpoint ?? "").trim().replace(/\/+$/, "");
+  const accessKeyId = (body.access_key_id ?? s.r2DirectAccessKeyId ?? env.r2_s3_access_key_id ?? "").trim();
+  let secret = body.secret?.trim() || null;
+  if (!secret && s.r2DirectSecretCipher) secret = await decryptSecret(s.r2DirectSecretCipher, env.admin);
+  if (!secret) secret = env.r2_s3_secret_access_key ?? null;
+  if (!endpoint || !accessKeyId || !secret) return null;
+  return {
+    endpoint,
+    region: "auto",
+    bucket: (body.bucket ?? s.r2DirectBucket ?? env.r2_s3_bucket ?? "cloud-r2pan").trim(),
+    accessKeyId,
+    secretAccessKey: secret,
+  };
 }
 
 const json = (data: unknown, status = 200) =>
@@ -1252,6 +1294,13 @@ export async function handleAdminApi(
       storage_webdav_url: s.storageWebdavUrl,
       storage_webdav_username: s.storageWebdavUsername,
       storage_webdav_password_configured: !!s.storageWebdavPasswordCipher,
+      // R2 S3 直传（上传加速）
+      r2_direct_endpoint: s.r2DirectEndpoint,
+      r2_direct_access_key_id: s.r2DirectAccessKeyId,
+      r2_direct_bucket: s.r2DirectBucket || "cloud-r2pan",
+      r2_direct_secret_configured: !!s.r2DirectSecretCipher,
+      // 是否已启用（存储后端是 R2 且凭据齐全）
+      r2_direct_enabled: (await directUpload(env)) !== null,
       // Analytics Engine
       analytics_engine_available: !!env.analytics,
       // UI 主题
@@ -1364,6 +1413,27 @@ export async function handleAdminApi(
       } else if (raw !== "__keep__") {
         const cipher = await encryptSecret(raw, env.admin);
         if (cipher) patch.storage_webdav_password_cipher = cipher;
+      }
+    }
+
+    // R2 S3 直传（上传加速）
+    if (typeof body.r2_direct_endpoint === "string") {
+      patch.r2_direct_endpoint = body.r2_direct_endpoint.trim().replace(/\/+$/, "");
+    }
+    if (typeof body.r2_direct_access_key_id === "string") {
+      patch.r2_direct_access_key_id = body.r2_direct_access_key_id.trim();
+    }
+    if (typeof body.r2_direct_bucket === "string") {
+      patch.r2_direct_bucket = body.r2_direct_bucket.trim();
+    }
+    // Secret Access Key —— 与 s3_secret_key 同样的三种处理模式
+    if (typeof body.r2_direct_secret === "string") {
+      const raw = body.r2_direct_secret.trim();
+      if (raw === "") {
+        patch.r2_direct_secret_cipher = "";
+      } else if (raw !== "__keep__") {
+        const cipher = await encryptSecret(raw, env.admin);
+        if (cipher) patch.r2_direct_secret_cipher = cipher;
       }
     }
 
@@ -1833,6 +1903,56 @@ export async function handleAdminApi(
     ).all()).results;
 
     return json({ summary, batches });
+  }
+
+  // ─══════════════════════════════════════════════════════════
+  // R2 S3 直传连通性测试（两步，能真正验证签名 + 浏览器 CORS）
+  //   ① POST /api/admin/storage/test-direct          —— 建 multipart + 签发分片 URL
+  //   ② 浏览器拿 URL 真发一次 PUT（这一步才能测出 CORS 是否配好）
+  //   ③ POST /api/admin/storage/test-direct/verify    —— 合并 + 校验 + 清理
+  // body 可带 endpoint / access_key_id / secret / bucket 临时值，不传则用已存的
+  // ─══════════════════════════════════════════════════════════
+  if (path === "/api/admin/storage/test-direct" && method === "POST") {
+    const body = await readJson<any>(req);
+    const cfg = await resolveDirectCfg(env, body);
+    if (!cfg) {
+      return json({ ok: false, error: "missing_direct_credentials" }, 400);
+    }
+    const key = `_r2pan-dtest-${Date.now().toString(36)}`;
+    try {
+      const uploadId = await directCreateMultipart(cfg, key, { contentType: "application/octet-stream" });
+      const url = await presignUploadPart(cfg, key, uploadId, 1, 600);
+      return json({ ok: true, key, uploadId, url, endpoint: cfg.endpoint, bucket: cfg.bucket });
+    } catch (err: any) {
+      return json({ ok: false, error: "create_multipart_failed", message: String(err?.message ?? err) }, 502);
+    }
+  }
+
+  if (path === "/api/admin/storage/test-direct/verify" && method === "POST") {
+    const body = await readJson<any>(req);
+    const key = typeof body.key === "string" ? body.key : "";
+    const uploadId = typeof body.uploadId === "string" ? body.uploadId : "";
+    if (!/^_r2pan-dtest-[a-z0-9]+$/.test(key) || !uploadId) {
+      return json({ ok: false, error: "invalid_params" }, 400);
+    }
+    const cfg = await resolveDirectCfg(env, body);
+    if (!cfg) return json({ ok: false, error: "missing_direct_credentials" }, 400);
+    try {
+      const parts = await directListParts(cfg, key, uploadId);
+      if (!parts.length) {
+        return json({ ok: false, error: "no_parts_uploaded", message: "浏览器没有成功 PUT 分片（多半是 R2 桶 CORS 未配置）" }, 502);
+      }
+      await directCompleteMultipart(cfg, key, uploadId, parts);
+      const st = await storage(env);
+      const head = await st.head(key);
+      const size = head?.size ?? 0;
+      // 清理测试对象
+      await st.delete(key).catch(() => {});
+      return json({ ok: true, size, parts: parts.length });
+    } catch (err: any) {
+      ctx.waitUntil(directAbortMultipart(cfg, key, uploadId).catch(() => {}));
+      return json({ ok: false, error: "verify_failed", message: String(err?.message ?? err) }, 502);
+    }
   }
 
   // ─══════════════════════════════════════════════════════════
