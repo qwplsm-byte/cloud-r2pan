@@ -643,6 +643,13 @@ async function streamFile(
         // 直链也记 download_logs —— share_id 字段存 direct link token 方便追踪
         .bind(token, row.file_id, row.name, ip, ua.slice(0, 500), browser, os, country, bytes, Date.now(), codeId)
         .run();
+      // 下载事件通知（60s 节流）
+      const { notifyEvent } = await import("./notify");
+      await notifyEvent(env, "download",
+        `📥 新下载 ${row.name} · ${bytes >= 1073741824 ? (bytes / 1073741824).toFixed(2) + " GB" : (bytes / 1048576).toFixed(1) + " MB"} · IP ${ip}`
+        + (country ? ` · ${country}` : "")
+        + (codeId ? ` · 激活码` : ""),
+        `dl:${token}:${ip}`);
       if (codeRow) {
         const dr = await deductQuota(env, codeRow, bytes);
         if (!dr.ok) {

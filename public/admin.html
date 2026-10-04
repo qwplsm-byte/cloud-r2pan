@@ -788,6 +788,23 @@ const I18N = {
     cronCleanupHint: 'Cron Trigger 于 UTC 19:00（北京时间凌晨 3:00）运行。注意：只被直链引用、没有被任何分享引用的文件不会被删除。',
     logRetention: '日志保留天数',
     logRetentionD: '下载日志与登录日志保留天数，超期自动删除（1-3650）',
+    // 事件通知
+    notifyTitle: '事件通知',
+    notifyTitleD: '下载、流量阈值、管理员登录事件推送到 Webhook 或 Telegram',
+    notifyWebhookD: 'POST JSON 到该地址，兼容 Bark/Server酱/钉钉/企业微信等',
+    notifyTgD: '找 @BotFather 创建 Bot 获取',
+    notifyChatIdD: '找 @userinfobot 查询你的 Chat ID',
+    notifyEventDownload: '下载通知',
+    notifyEventDownloadD: '有访客下载文件时推送（同 IP 同文件 60 秒内只推一次）',
+    notifyEventQuota: '流量阈值通知',
+    notifyEventQuotaD: '月流量达到 80% 和 100% 时各推送一次',
+    notifyEventLogin: '登录通知',
+    notifyEventLoginD: '管理员登录成功或失败时推送',
+    notifyTestBtn: '发送测试',
+    notifyHint: '两种渠道可同时启用，至少填一个。密钥输入框：留空 = 保持不变；输入 - = 清除已保存的值。',
+    notifyTestOk: '测试通知已发送：',
+    notifyTestNone: '未配置任何渠道或发送失败，请检查配置',
+    notifyTestFail: '发送失败，请稍后重试',
     codesFloatingBtn: '🎟️ 激活码浮动按钮',
     codesFloatingBtnD: '在分享页右上角（或左上角）显示一个卡片图标，用户点击后可绑定激活码、查询额度、解绑',
     codesFloatingBtnHint: '默认开启。关闭后用户只能通过 URL 参数 ?code=XXX 携带激活码（不推荐）',
@@ -1158,6 +1175,23 @@ const I18N = {
     cronCleanupHint: 'Cron Trigger runs at 19:00 UTC (3:00 AM Beijing). Files referenced only by direct links are never deleted.',
     logRetention: 'Log Retention (days)',
     logRetentionD: 'Download and login logs older than this are deleted daily (1-3650)',
+    // Notifications
+    notifyTitle: 'Event Notifications',
+    notifyTitleD: 'Push download, traffic threshold and admin login events to a webhook or Telegram',
+    notifyWebhookD: 'POSTs JSON to this URL; works with Bark/ServerChan/DingTalk/WeCom etc.',
+    notifyTgD: 'Create a bot via @BotFather to get this token',
+    notifyChatIdD: 'Find your Chat ID via @userinfobot',
+    notifyEventDownload: 'Download events',
+    notifyEventDownloadD: 'Notify when a visitor downloads a file (throttled per IP per file, 60s)',
+    notifyEventQuota: 'Traffic threshold alerts',
+    notifyEventQuotaD: 'Notify once at 80% and once at 100% of monthly traffic',
+    notifyEventLogin: 'Login alerts',
+    notifyEventLoginD: 'Notify on admin login success or failure',
+    notifyTestBtn: 'Send test',
+    notifyHint: 'Both channels can be enabled together; fill at least one. Secret fields: leave empty = keep current; type - = clear saved value.',
+    notifyTestOk: 'Test notification sent:',
+    notifyTestNone: 'No channel configured or delivery failed, please check settings',
+    notifyTestFail: 'Send failed, please retry later',
     codesFloatingBtn: '🎟️ Activation Code Floating Button',
     codesFloatingBtnD: 'Show a card icon on the share page corner. Users can bind/unbind their code and check balance by clicking it.',
     codesFloatingBtnHint: 'On by default. When off, users can only use activation codes via the URL parameter ?code=XXX (not recommended).',
@@ -3411,6 +3445,47 @@ async function loadSettings(){
       </div>
       <div class="tip" style="margin-top:8px">${esc(t('cronCleanupHint'))}</div>
     </div>
+    <!-- 事件通知组 -->
+    <div class="glass group">
+      <div class="row">
+        <div class="info"><div class="t">🔔 ${esc(t('notifyTitle'))}</div><div class="d">${esc(t('notifyTitleD'))}</div></div>
+        <button class="btn sm" id="st-notify-test">${esc(t('notifyTestBtn'))}</button>
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">Webhook URL</div><div class="d">${esc(t('notifyWebhookD'))}</div></div>
+        <input type="text" id="st-notify-webhook" data-configured="${s.notify_webhook_configured ? '1' : '0'}" style="width:240px;padding:9px 12px;border-radius:12px;font-size:14px;font-family:ui-monospace,'SF Mono',monospace;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none" placeholder="${s.notify_webhook_configured ? '••••••••（已配置）' : 'https://...'}">
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">Telegram Token</div><div class="d">${esc(t('notifyTgD'))}</div></div>
+        <input type="text" id="st-notify-tg" data-configured="${s.notify_tg_configured ? '1' : '0'}" style="width:240px;padding:9px 12px;border-radius:12px;font-size:14px;font-family:ui-monospace,'SF Mono',monospace;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none" placeholder="${s.notify_tg_configured ? '••••••••（已配置）' : '123456:ABC-DEF...'}">
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">Telegram Chat ID</div><div class="d">${esc(t('notifyChatIdD'))}</div></div>
+        <input type="text" id="st-notify-chat" value="${esc(s.notify_tg_chat_id ?? '')}" style="width:240px;padding:9px 12px;border-radius:12px;font-size:14px;font-family:ui-monospace,'SF Mono',monospace;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none" placeholder="123456789">
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">${esc(t('notifyEventDownload'))}</div><div class="d">${esc(t('notifyEventDownloadD'))}</div></div>
+        <label class="switch">
+          <input type="checkbox" id="st-notify-download" ${s.notify_event_download ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">${esc(t('notifyEventQuota'))}</div><div class="d">${esc(t('notifyEventQuotaD'))}</div></div>
+        <label class="switch">
+          <input type="checkbox" id="st-notify-quota" ${s.notify_event_quota ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">${esc(t('notifyEventLogin'))}</div><div class="d">${esc(t('notifyEventLoginD'))}</div></div>
+        <label class="switch">
+          <input type="checkbox" id="st-notify-login" ${s.notify_event_login ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="tip" style="margin-top:8px">${esc(t('notifyHint'))}</div>
+    </div>
     <!-- 激活码浮动按钮组 -->
     <div class="glass group">
       <div class="row">
@@ -3678,11 +3753,34 @@ async function loadSettings(){
       codes_floating_button_position: $('#st-codes-pos').value,
       cron_cleanup_enabled: $('#st-cron-cleanup').checked,
       log_retention_days: Number($('#st-log-retention').value) || 30,
+      notify_webhook_url: (() => { const el = $('#st-notify-webhook'); const v = el.value.trim(); return v === '-' ? '' : (v === '' && el.dataset.configured === '1' ? '__keep__' : v); })(),
+      notify_tg_token: (() => { const el = $('#st-notify-tg'); const v = el.value.trim(); return v === '-' ? '' : (v === '' && el.dataset.configured === '1' ? '__keep__' : v); })(),
+      notify_tg_chat_id: $('#st-notify-chat').value.trim(),
+      notify_event_download: $('#st-notify-download').checked,
+      notify_event_quota: $('#st-notify-quota').checked,
+      notify_event_login: $('#st-notify-login').checked,
       storage_provider: $('#st-backend').value,
     };
     await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });
     toast(t('saved'));
     loadSettings();
+  });
+
+  // 通知测试按钮
+  $('#st-notify-test')?.addEventListener('click', async () => {
+    const btn = $('#st-notify-test');
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const r = await api('/api/admin/notify/test', { method: 'POST' });
+      const parts = [];
+      if (r.webhook) parts.push('Webhook ✓');
+      if (r.telegram) parts.push('Telegram ✓');
+      if (parts.length === 0) toast(t('notifyTestNone'), 'err');
+      else toast(t('notifyTestOk') + ' ' + parts.join(' · '));
+    } catch {
+      toast(t('notifyTestFail'), 'err');
+    }
+    btn.disabled = false; btn.textContent = t('notifyTestBtn');
   });
 
   // ═══════════════════════════════════

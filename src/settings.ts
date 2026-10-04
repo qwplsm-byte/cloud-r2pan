@@ -160,6 +160,18 @@ export interface Settings {
   cronCleanupEnabled: boolean;
   /** 下载/登录日志保留天数（默认 30） */
   logRetentionDays: number;
+
+  // ═══════ 事件通知（Webhook + Telegram） ═══════
+  /** 通用 Webhook URL（AES-GCM 加密存），空 = 不启用 */
+  notifyWebhookCipher: string | null;
+  /** Telegram Bot Token（AES-GCM 加密存） */
+  notifyTgCipher: string | null;
+  /** Telegram Chat ID（非敏感，明文存） */
+  notifyTgChatId: string | null;
+  /** 事件开关：下载 / 流量阈值 / 登录 */
+  notifyEventDownload: boolean;
+  notifyEventQuota: boolean;
+  notifyEventLogin: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -221,6 +233,13 @@ export const DEFAULT_SETTINGS: Settings = {
   // 自动清理 —— 默认开启，日志保留 30 天
   cronCleanupEnabled: true,
   logRetentionDays: 30,
+  // 事件通知 —— 默认全部关闭
+  notifyWebhookCipher: null,
+  notifyTgCipher: null,
+  notifyTgChatId: null,
+  notifyEventDownload: false,
+  notifyEventQuota: false,
+  notifyEventLogin: false,
 };
 
 function toInt(v: unknown, fallback: number): number {
@@ -311,6 +330,13 @@ export async function getSettings(env: Env): Promise<Settings> {
     // 自动清理
     cronCleanupEnabled: map.get("cron_cleanup_enabled") !== "0",
     logRetentionDays: toInt(map.get("log_retention_days"), DEFAULT_SETTINGS.logRetentionDays),
+    // 事件通知
+    notifyWebhookCipher: map.get("notify_webhook_cipher") ?? null,
+    notifyTgCipher: map.get("notify_tg_cipher") ?? null,
+    notifyTgChatId: map.get("notify_tg_chat_id") ?? null,
+    notifyEventDownload: map.get("notify_event_download") === "1",
+    notifyEventQuota: map.get("notify_event_quota") === "1",
+    notifyEventLogin: map.get("notify_event_login") === "1",
   };
 
   // ② 写入内存缓存
@@ -378,4 +404,29 @@ export async function addTraffic(env: Env, bytes: number): Promise<void> {
       "INSERT INTO traffic_stats(day, bytes, downloads) VALUES(?1, ?2, 1) ON CONFLICT(day) DO UPDATE SET bytes = bytes + excluded.bytes, downloads = downloads + excluded.downloads"
     ).bind(day, bytes),
   ]);
+
+  // 流量阈值通知（80% / 100%，每月每档最多一次；级别持久化在 settings.quota_notified = "<month>|<level>"）
+  try {
+    const s = await getSettings(env);
+    if (s.trafficLimitBytes > 0) {
+      const pct = s.trafficUsedBytes / s.trafficLimitBytes;
+      const level = pct >= 1 ? 100 : pct >= 0.8 ? 80 : 0;
+      if (level > 0) {
+        const row = await env.db.prepare("SELECT value FROM settings WHERE key = 'quota_notified'").first<{ value: string }>();
+        const [notifiedMonth, notifiedLevel] = (row?.value ?? "").split("|");
+        const already = notifiedMonth === month && Number(notifiedLevel ?? 0) >= level;
+        if (!already) {
+          await updateSettings(env, { quota_notified: `${month}|${level}` });
+          const { notifyEvent } = await import("./notify");
+          const used = s.trafficUsedBytes;
+          const gb = (n: number) => (n / 1024 ** 3).toFixed(2) + " GB";
+          await notifyEvent(env, "quota",
+            `🚨 本月流量已达 ${level}%（${gb(used)} / ${gb(s.trafficLimitBytes)}）Traffic ${level}% used`,
+            `quota:${month}:${level}`);
+        }
+      }
+    }
+  } catch {
+    // 阈值通知失败不影响流量记账
+  }
 }

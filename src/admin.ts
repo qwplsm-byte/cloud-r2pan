@@ -146,6 +146,14 @@ async function writeLoginLog(
       )
       .bind(action, clientIp(req), ua || null, browser, os, country, result, reason, Date.now())
       .run();
+    // 登录事件通知（成功/失败都通知，60s 节流）
+    const { notifyEvent } = await import("./notify");
+    await notifyEvent(env, "login",
+      (result === "success" ? "🔓 管理员登录成功 Login success" : "🚨 管理员登录失败 Login FAILED")
+      + ` · IP ${clientIp(req)} · ${browser}/${os}`
+      + (country ? ` · ${country}` : "")
+      + (reason ? ` · ${reason}` : ""),
+      `login:${clientIp(req)}:${result}`);
   } catch {
     // 日志写入失败不影响主流程
   }
@@ -956,6 +964,13 @@ export async function handleAdminApi(
     return json({ ok: true, deleted: r.meta.changes ?? 0 });
   }
 
+  // ── 通知测试 ───────────────────────────────────────
+  if (path === "/api/admin/notify/test" && method === "POST") {
+    const { sendTestNotification } = await import("./notify");
+    const r = await sendTestNotification(env);
+    return json({ ok: true, ...r });
+  }
+
   // ── 2FA 状态查询 ───────────────────────────────────
   if (path === "/api/admin/2fa/status" && method === "GET") {
     const s = await getSettings(env);
@@ -1280,6 +1295,13 @@ export async function handleAdminApi(
       // 自动清理（Cron）
       cron_cleanup_enabled: s.cronCleanupEnabled,
       log_retention_days: s.logRetentionDays,
+      // 事件通知
+      notify_webhook_configured: !!s.notifyWebhookCipher,
+      notify_tg_configured: !!s.notifyTgCipher,
+      notify_tg_chat_id: s.notifyTgChatId ?? "",
+      notify_event_download: s.notifyEventDownload,
+      notify_event_quota: s.notifyEventQuota,
+      notify_event_login: s.notifyEventLogin,
       // WebDAV
       webdav_enabled: s.webdavEnabled,
       webdav_username: s.webdavUsername,
@@ -1430,6 +1452,30 @@ export async function handleAdminApi(
         patch.log_retention_days = String(Math.floor(n));
       }
     }
+
+    // 事件通知（webhook / tg token 加密存储，"" 清空、"__keep__" 保持不变）
+    if (typeof body.notify_webhook_url === "string") {
+      const raw = body.notify_webhook_url.trim();
+      if (raw === "") patch.notify_webhook_cipher = "";
+      else if (raw !== "__keep__") {
+        const cipher = await encryptSecret(raw, env.admin);
+        if (cipher) patch.notify_webhook_cipher = cipher;
+      }
+    }
+    if (typeof body.notify_tg_token === "string") {
+      const raw = body.notify_tg_token.trim();
+      if (raw === "") patch.notify_tg_cipher = "";
+      else if (raw !== "__keep__") {
+        const cipher = await encryptSecret(raw, env.admin);
+        if (cipher) patch.notify_tg_cipher = cipher;
+      }
+    }
+    if (typeof body.notify_tg_chat_id === "string") {
+      patch.notify_tg_chat_id = body.notify_tg_chat_id.trim().slice(0, 64);
+    }
+    if (typeof body.notify_event_download === "boolean") patch.notify_event_download = body.notify_event_download ? "1" : "0";
+    if (typeof body.notify_event_quota === "boolean") patch.notify_event_quota = body.notify_event_quota ? "1" : "0";
+    if (typeof body.notify_event_login === "boolean") patch.notify_event_login = body.notify_event_login ? "1" : "0";
 
     // ── WebDAV ──
     if (typeof body.webdav_enabled === "boolean") patch.webdav_enabled = body.webdav_enabled ? "1" : "0";
