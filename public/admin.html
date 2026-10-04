@@ -229,6 +229,7 @@
   --btn-danger-color: #ffb3ae;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
+button, a, input, select, label, summary { touch-action: manipulation; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
@@ -356,15 +357,21 @@ body {
 
 /* ── 移动端折叠 ───────────────────────── */
 @media (max-width: 760px) {
-  .layout { flex-direction: column; }
+  .layout { flex-direction: column; align-items: stretch; }
   .sidebar {
     position: static; width: 100%; max-height: none;
     flex-direction: row; flex-wrap: wrap; gap: 6px;
     padding: 10px;
   }
-  .sb-main { padding: 7px 12px; font-size: 13px; }
+  .sb-main { padding: 7px 12px; font-size: 13px; width: auto; }
   .sb-main .chev { display: none; }
-  .sb-sub { display: none; }
+  /* 子菜单平铺为标签行：手机上所有功能 Tab 必须可直接点达 */
+  .sb-sub {
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    max-height: none; overflow: visible;
+    gap: 2px; padding-left: 0; width: 100%;
+  }
+  .sb-sub button { padding: 8px 12px; width: auto; }
 }
 
 /* ── 统计卡片 ─────────────────────────── */
@@ -385,7 +392,7 @@ body {
 .section-title h2 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
 
 /* ── 图表 ─────────────────────────────── */
-.chart { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 8px; }
+.chart { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 8px; min-width: 460px; }
 .chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; height: 100%; }
 .chart .bar { width: 100%; max-width: 34px; border-radius: 8px 8px 4px 4px;
   background: linear-gradient(180deg, rgba(103,232,249,.95), rgba(59,130,246,.55));
@@ -524,7 +531,7 @@ body {
   animation: fadeIn .25s both; }
 @media (min-width: 640px) { .modal-mask { align-items: center; padding-bottom: 0; } }
 .modal {
-  width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+  width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
   padding: 26px; border-radius: 32px 32px 0 0;
   background: var(--glass-strong);
   backdrop-filter: none; -webkit-backdrop-filter: none;
@@ -617,9 +624,18 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .actions-cell { display: flex; gap: 6px; }
+/* 移动端：保留全部表格列（外层 overflow-x 容器横向滚动），顶栏允许换行 */
 @media (max-width: 720px) {
-  .tbl th:nth-child(n+5), .tbl td:nth-child(n+5) { display: none; }
+  .topbar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
   .topbar .sub { display: none; }
+  .topbar .spacer { display: none; }
+  .traffic-pill { margin-left: auto; }
+  .section { padding: 16px 14px; }
+  /* 输入框聚焦字号 ≥16px，避免 iOS Safari 自动放大页面 */
+  .modal input, .modal select, .field input, .field select,
+  .group .row input[type=number], .group .row input[type=text],
+  .link-box input, .section input[type=text], .section input[type=password],
+  .section input[type=number], .section select, .modal input[type=number] { font-size: 16px !important; }
 }
 </style>
 </head>
@@ -1797,6 +1813,7 @@ async function loadOverview(){
     </div>
     <div class="glass section">
       <div class="section-title"><h2>📊 ${esc(t('chartTitle'))}</h2></div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
       <div class="chart">
         ${s.chart.map(d => `
         <div class="col">
@@ -1805,6 +1822,7 @@ async function loadOverview(){
           </div>
           <div class="day">${d.day.slice(5).replace('-','/')}</div>
         </div>`).join('')}
+      </div>
       </div>
     </div>
     <div class="glass section">
@@ -2872,6 +2890,7 @@ async function loadGlobal(){
         <h3 style="margin:0;font-size:14px;color:var(--text-2)">${LANG==='zh'?'国家/地区排行 · Top 20':'Top 20 Countries'}</h3>
         <span style="color:var(--text-3);font-size:12px">${esc(t('globalGeoSource'))}</span>
       </div>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
       <table class="tbl">
         <thead><tr>
           <th>${esc(t('globalCountry'))}</th>
@@ -2882,6 +2901,7 @@ async function loadGlobal(){
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      </div>
     </div>
   `;
 }
