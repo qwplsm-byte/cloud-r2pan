@@ -161,6 +161,23 @@ const SCHEMA_STATEMENTS: string[] = [
     path TEXT PRIMARY KEY,
     created_at INTEGER NOT NULL
   )`,
+  // ═══════════ WebAuthn / Passkey ═══════════
+  `CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id TEXT PRIMARY KEY,
+    public_key TEXT NOT NULL,
+    counter INTEGER NOT NULL DEFAULT 0,
+    transports TEXT,
+    device_type TEXT,
+    backed_up INTEGER NOT NULL DEFAULT 0,
+    name TEXT,
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS webauthn_challenges (
+    challenge TEXT PRIMARY KEY,
+    purpose TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  )`,
 ];
 
 /** 所有预期的业务表 —— 自动建表 & 升级时都要检查 */
@@ -168,7 +185,7 @@ export const EXPECTED_TABLES = [
   "files", "shares", "direct_links", "download_logs", "login_logs",
   "turnstile_visits", "banned_ips", "settings", "traffic_stats",
   "oauth_states", "oauth_providers", "activation_plans", "activation_codes",
-  "directories",
+  "directories", "webauthn_credentials", "webauthn_challenges",
 ];
 
 let schemaReady = false;

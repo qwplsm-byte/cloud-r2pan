@@ -283,6 +283,79 @@ export async function handleAdminApi(
     });
   }
 
+  // ── WebAuthn / Passkey：免密登录（无需会话，与 login 同级） ──
+  if (path === "/api/admin/webauthn/enabled" && method === "GET") {
+    const { hasCredentials } = await import("./webauthn");
+    return json({ enabled: await hasCredentials(env) });
+  }
+  if (path === "/api/admin/webauthn/auth/options" && method === "POST") {
+    const ip = clientIp(req);
+    if (!rateLimitLogin(ip)) {
+      ctx.waitUntil(writeLoginLog(env, req, "login", "fail", "rate_limited"));
+      return json({ error: msg(req, "尝试过于频繁，请稍后再试", "Too many attempts, try later") }, 429);
+    }
+    const { generateAuthenticationOptions } = await import("@simplewebauthn/server");
+    const { saveChallenge } = await import("./webauthn");
+    const creds = await env.db.prepare("SELECT id, transports FROM webauthn_credentials").all<{ id: string; transports: string | null }>();
+    const options = await generateAuthenticationOptions({
+      rpID: url.hostname,
+      userVerification: "preferred",
+      allowCredentials: (creds.results ?? []).map((c) => ({
+        id: c.id,
+        transports: c.transports ? (c.transports.split(",") as any) : undefined,
+      })),
+    });
+    await saveChallenge(env, options.challenge, "auth");
+    return json(options);
+  }
+  if (path === "/api/admin/webauthn/auth/verify" && method === "POST") {
+    const { verifyAuthenticationResponse } = await import("@simplewebauthn/server");
+    const { takeChallenge, b64ToBytes } = await import("./webauthn");
+    const expectedChallenge = await takeChallenge(env, "auth");
+    if (!expectedChallenge) return json({ error: msg(req, "验证已过期，请重试", "Challenge expired, retry") }, 401);
+    const body = await readJson<any>(req);
+    if (!body?.id) return json({ error: "bad_request" }, 400);
+    const credential = await env.db.prepare(
+      "SELECT id, public_key, counter, transports FROM webauthn_credentials WHERE id = ?1"
+    ).bind(body.id).first<{ id: string; public_key: string; counter: number; transports: string | null }>();
+    if (!credential) {
+      ctx.waitUntil(writeLoginLog(env, req, "login", "fail", "passkey_unknown"));
+      return json({ error: msg(req, "Passkey 未注册", "Passkey not registered") }, 401);
+    }
+    try {
+      const verification = await verifyAuthenticationResponse({
+        response: body as any,
+        expectedChallenge,
+        expectedOrigin: `${url.protocol}//${url.host}`,
+        expectedRPID: url.hostname,
+        credential: {
+          id: credential.id,
+          publicKey: b64ToBytes(credential.public_key) as any,
+          counter: credential.counter,
+          transports: credential.transports ? (credential.transports.split(",") as any) : undefined,
+        },
+        // 管理员登录放宽到 user presence（preferred 注册）；presence 本身始终强制校验
+        requireUserVerification: false,
+      });
+      if (!verification.verified) throw new Error("verify_failed");
+      await env.db.prepare(
+        "UPDATE webauthn_credentials SET counter = ?1, last_used_at = ?2 WHERE id = ?3"
+      ).bind(verification.authenticationInfo.newCounter, Date.now(), credential.id).run();
+      ctx.waitUntil(writeLoginLog(env, req, "login", "success", "passkey"));
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: {
+          "content-type": "application/json;charset=utf-8",
+          "set-cookie": await createSession(env, url.protocol === "https:"),
+          "cache-control": "no-store",
+        },
+      });
+    } catch (e) {
+      console.error("passkey auth failed:", e);
+      ctx.waitUntil(writeLoginLog(env, req, "login", "fail", "passkey_verify"));
+      return json({ error: msg(req, "Passkey 验证失败", "Passkey verification failed") }, 401);
+    }
+  }
+
   // ── 以下全部需要会话 ──────────────────────────────
   const unauthorized = await requireAuth(req, env);
   if (unauthorized) return unauthorized;
@@ -310,6 +383,80 @@ export async function handleAdminApi(
       recovery_remaining: s.totpRecoveryHash ? s.totpRecoveryHash.split(",").filter(Boolean).length : 0,
       ui_theme: s.uiTheme,
     });
+  }
+
+  // ── WebAuthn / Passkey：注册与设备管理（需已登录） ──
+  if (path === "/api/admin/webauthn/register/options" && method === "POST") {
+    const { generateRegistrationOptions } = await import("@simplewebauthn/server");
+    const { saveChallenge } = await import("./webauthn");
+    const existing = await env.db.prepare("SELECT id, transports FROM webauthn_credentials").all<{ id: string; transports: string | null }>();
+    const options = await generateRegistrationOptions({
+      rpName: (await getSettings(env)).siteTitle || "cloud-r2pan",
+      rpID: url.hostname,
+      userName: "admin",
+      attestationType: "none",
+      excludeCredentials: (existing.results ?? []).map((c) => ({
+        id: c.id,
+        transports: c.transports ? (c.transports.split(",") as any) : undefined,
+      })),
+      authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
+    });
+    await saveChallenge(env, options.challenge, "register");
+    return json(options);
+  }
+  if (path === "/api/admin/webauthn/register/verify" && method === "POST") {
+    const { verifyRegistrationResponse } = await import("@simplewebauthn/server");
+    const { takeChallenge, bytesToB64 } = await import("./webauthn");
+    const expectedChallenge = await takeChallenge(env, "register");
+    if (!expectedChallenge) return json({ error: msg(req, "验证已过期，请重试", "Challenge expired, retry") }, 400);
+    const body = await readJson<any>(req);
+    try {
+      const verification = await verifyRegistrationResponse({
+        response: body as any,
+        expectedChallenge,
+        expectedOrigin: `${url.protocol}//${url.host}`,
+        expectedRPID: url.hostname,
+        requireUserVerification: false,
+      });
+      if (!verification.verified || !verification.registrationInfo) {
+        return json({ error: msg(req, "注册验证失败", "Registration verification failed") }, 400);
+      }
+      const info = verification.registrationInfo;
+      const name = typeof body?.nickname === "string" && body.nickname.trim() ? body.nickname.trim().slice(0, 32) : null;
+      await env.db.prepare(
+        `INSERT INTO webauthn_credentials(id, public_key, counter, transports, device_type, backed_up, name, created_at)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(id) DO UPDATE SET counter = excluded.counter, last_used_at = NULL`
+      ).bind(
+        info.credential.id,
+        bytesToB64(info.credential.publicKey),
+        info.credential.counter,
+        (info.credential.transports ?? []).join(","),
+        info.credentialDeviceType,
+        info.credentialBackedUp ? 1 : 0,
+        name || (info.credentialDeviceType === "multiDevice" ? "多设备 Passkey" : "本机 Passkey"),
+        Date.now()
+      ).run();
+      return json({ ok: true });
+    } catch (e) {
+      console.error("passkey register failed:", e);
+      return json({ error: msg(req, "注册失败，请重试", "Registration failed, retry") }, 400);
+    }
+  }
+  if (path === "/api/admin/webauthn/credentials" && method === "GET") {
+    const { results } = await env.db.prepare(
+      "SELECT id, device_type, backed_up, name, created_at, last_used_at FROM webauthn_credentials ORDER BY created_at DESC"
+    ).all();
+    return json({ credentials: results ?? [] });
+  }
+  const credDelMatch = /^\/api\/admin\/webauthn\/credentials\/([^/]+)$/.exec(path);
+  if (credDelMatch && method === "DELETE") {
+    const body = await readJson<{ admin_key?: string }>(req);
+    if (!body.admin_key || !checkAdminKey(env, body.admin_key)) {
+      return json({ error: msg(req, "管理密钥错误", "Invalid admin key") }, 401);
+    }
+    const r = await env.db.prepare("DELETE FROM webauthn_credentials WHERE id = ?1").bind(credDelMatch[1]).run();
+    return json({ ok: true, deleted: r.meta.changes ?? 0 });
   }
 
   // ── 概览统计 ──────────────────────────────────────

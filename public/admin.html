@@ -835,6 +835,17 @@ const I18N = {
     twofaHasCloudflareRecovery: '已配置 Cloudflare 超级恢复码 ✅',
     twofaRecoveryRemaining: '剩余恢复码 {n} 个',
     twofaStatusOn: '已开启',
+    // Passkey
+    passkeyLoginBtn: '使用 Passkey 登录',
+    passkeyNotSupported: '当前浏览器不支持 Passkey',
+    passkeyErr: 'Passkey 验证失败，请重试',
+    passkeyRegOk: 'Passkey 注册成功',
+    passkeyTitle: 'Passkey 免密登录',
+    passkeyTitleD: '使用指纹 / 面容 / 设备 PIN 直接登录管理后台，无需输入管理密钥',
+    passkeyAdd: '添加 Passkey',
+    passkeyEmpty: '尚未注册任何 Passkey。添加后可在登录页一键免密登录。',
+    passkeyDelete: '删除',
+    passkeyHint: 'Passkey 与当前访问域名绑定；删除全部 Passkey 后登录页自动隐藏免密入口。密码与 2FA 登录始终可用。',
     twofaStatusOff: '未开启',
     // Turnstile
     tsGroupTitle: '🛡️ Cloudflare Turnstile 人机验证',
@@ -1222,6 +1233,17 @@ const I18N = {
     twofaHasCloudflareRecovery: 'Cloudflare fallback code configured ✅',
     twofaRecoveryRemaining: '{n} recovery codes remaining',
     twofaStatusOn: 'Enabled',
+    // Passkey
+    passkeyLoginBtn: 'Login with Passkey',
+    passkeyNotSupported: 'Passkey is not supported in this browser',
+    passkeyErr: 'Passkey verification failed, please retry',
+    passkeyRegOk: 'Passkey registered',
+    passkeyTitle: 'Passkey Login',
+    passkeyTitleD: 'Sign in with fingerprint / face / device PIN — no admin key needed',
+    passkeyAdd: 'Add Passkey',
+    passkeyEmpty: 'No Passkey registered yet. Add one for one-tap passwordless login.',
+    passkeyDelete: 'Delete',
+    passkeyHint: 'Passkeys are bound to the current domain; the login button hides automatically when none remain. Password and 2FA login always stay available.',
     twofaStatusOff: 'Disabled',
     // Turnstile
     tsGroupTitle: '🛡️ Cloudflare Turnstile',
@@ -1547,8 +1569,14 @@ function showLogin(){
         <button class="btn primary" type="submit">${esc(t('login'))}</button>
         <div class="err" id="login-err"></div>
       </form>
+      <button class="btn sm" id="login-passkey" style="width:100%;margin-top:10px;display:none">🔑 ${esc(t('passkeyLoginBtn'))}</button>
       <div class="lang-row"><button class="btn sm" id="login-lang">${esc(t('switchTo'))}</button></div>
     `);
+    // 已注册 Passkey 时显示免密登录按钮
+    api('/api/admin/webauthn/enabled').then(r => {
+      if (r.enabled) $('#login-passkey').style.display = '';
+    }).catch(() => {});
+    $('#login-passkey').onclick = () => passkeyLogin();
     $('#login-form').onsubmit = async e => {
       e.preventDefault();
       const key = $('#login-key').value.trim();
@@ -1647,6 +1675,93 @@ function shake(){
   const c = $('.login-card');
   if(!c) return;
   c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
+}
+
+/* ═══════════ Passkey / WebAuthn ═══════════ */
+function b64uToBytes(s){
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesToB64u(buf){
+  const b = new Uint8Array(buf);
+  let s = '';
+  for (const c of b) s += String.fromCharCode(c);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** 登录页：Passkey 免密登录 */
+async function passkeyLogin(){
+  const err = $('#login-err');
+  if (!window.PublicKeyCredential) { err.textContent = t('passkeyNotSupported'); shake(); return; }
+  try {
+    err.textContent = '';
+    const opts = await api('/api/admin/webauthn/auth/options', { method: 'POST' });
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge: b64uToBytes(opts.challenge),
+        rpId: opts.rpId,
+        timeout: opts.timeout || 60000,
+        userVerification: opts.userVerification || 'preferred',
+        allowCredentials: (opts.allowCredentials || []).map(c => ({
+          id: b64uToBytes(c.id), type: 'public-key', transports: c.transports || undefined,
+        })),
+      },
+    });
+    const body = {
+      id: assertion.id,
+      rawId: bytesToB64u(assertion.rawId),
+      type: assertion.type,
+      response: {
+        clientDataJSON: bytesToB64u(assertion.response.clientDataJSON),
+        authenticatorData: bytesToB64u(assertion.response.authenticatorData),
+        signature: bytesToB64u(assertion.response.signature),
+        userHandle: assertion.response.userHandle ? bytesToB64u(assertion.response.userHandle) : null,
+      },
+    };
+    await api('/api/admin/webauthn/auth/verify', { method: 'POST', body: JSON.stringify(body) });
+    showApp();
+  } catch (e) {
+    err.textContent = e && e.message === 'unauthorized' ? t('passkeyErr') : (e && e.message) || t('passkeyErr');
+    shake();
+  }
+}
+
+/** 设置页：注册新 Passkey */
+async function passkeyRegister(){
+  if (!window.PublicKeyCredential) { toast(t('passkeyNotSupported'), 'err'); return; }
+  const opts = await api('/api/admin/webauthn/register/options', { method: 'POST' });
+  const cred = await navigator.credentials.create({
+    publicKey: {
+      challenge: b64uToBytes(opts.challenge),
+      rp: opts.rp,
+      user: { id: b64uToBytes(opts.user.id), name: opts.user.name, displayName: opts.user.displayName },
+      pubKeyCredParams: opts.pubKeyCredParams,
+      timeout: opts.timeout || 60000,
+      attestation: opts.attestation || 'none',
+      excludeCredentials: (opts.excludeCredentials || []).map(c => ({
+        id: b64uToBytes(c.id), type: 'public-key', transports: c.transports || undefined,
+      })),
+      authenticatorSelection: opts.authenticatorSelection || undefined,
+    },
+  });
+  const body = {
+    id: cred.id,
+    rawId: bytesToB64u(cred.rawId),
+    type: cred.type,
+    nickname: '',
+    response: {
+      clientDataJSON: bytesToB64u(cred.response.clientDataJSON),
+      attestationObject: bytesToB64u(cred.response.attestationObject),
+      transports: cred.response.getTransports ? cred.response.getTransports() : [],
+    },
+  };
+  await api('/api/admin/webauthn/register/verify', { method: 'POST', body: JSON.stringify(body) });
+  toast(t('passkeyRegOk'));
+  loadSettings();
 }
 
 function renderLoginCard(bodyHtml){
@@ -3528,6 +3643,15 @@ async function loadSettings(){
         }
       </div>
     </div>
+    <!-- Passkey 组 -->
+    <div class="glass group">
+      <div class="row">
+        <div class="info"><div class="t">🔑 ${esc(t('passkeyTitle'))}</div><div class="d">${esc(t('passkeyTitleD'))}</div></div>
+        <button class="btn sm primary" id="passkey-add">＋ ${esc(t('passkeyAdd'))}</button>
+      </div>
+      <div id="passkey-list"></div>
+      <div class="tip" style="margin-top:8px">${esc(t('passkeyHint'))}</div>
+    </div>
     <!-- Turnstile 组 —— 状态摘要 + 配置按钮 -->
     <div class="glass group">
       <div class="row">
@@ -4215,6 +4339,49 @@ async function loadSettings(){
       if (!(await confirmDialog(t('confirmDeleteTitle'), t('confirmOAuthDeleteD'), false))) return;
       await api(`/api/admin/oauth/providers/${id}`, { method:'DELETE' });
       loadSettings();
+    }
+  });
+
+  // ═══════ Passkey 设备管理 ═══════════════════════════
+  (async () => {
+    const listEl = $('#passkey-list');
+    if (!listEl) return;
+    try {
+      const r = await api('/api/admin/webauthn/credentials');
+      const creds = r.credentials || [];
+      if (creds.length === 0) {
+        listEl.innerHTML = `<div class="row"><div style="font-size:12.5px;color:var(--text-3)">${esc(t('passkeyEmpty'))}</div></div>`;
+        return;
+      }
+      listEl.innerHTML = creds.map(c => `
+        <div class="row">
+          <div class="info">
+            <div class="t">🔑 ${esc(c.name || 'Passkey')}</div>
+            <div style="font-size:11.5px;color:var(--text-3);margin-top:2px;font-family:ui-monospace,'SF Mono',monospace">${esc(c.id.slice(0, 20))}…</div>
+          </div>
+          <button class="btn sm danger" data-passkey-del="${esc(c.id)}">${esc(t('passkeyDelete'))}</button>
+        </div>`).join('');
+    } catch { listEl.innerHTML = ''; }
+  })();
+  $('#passkey-add')?.addEventListener('click', async () => {
+    try {
+      await passkeyRegister();
+    } catch (e) {
+      toast(e?.message === 'unauthorized' ? t('loadingErr') : (t('passkeyErr')), 'err');
+      loadSettings();
+    }
+  });
+  $('#passkey-list')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-passkey-del]');
+    if (!btn) return;
+    const adminKey = await promptAdminKey();
+    if (!adminKey) return;
+    try {
+      await api(`/api/admin/webauthn/credentials/${encodeURIComponent(btn.dataset.passkeyDel)}`, { method: 'DELETE', body: JSON.stringify({ admin_key: adminKey }) });
+      toast(t('saved'));
+      loadSettings();
+    } catch (err) {
+      toast(err.message, 'err');
     }
   });
 
