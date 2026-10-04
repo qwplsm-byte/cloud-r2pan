@@ -249,7 +249,7 @@ function buildCanonicalRequest(
 async function hmacSha256(key: ArrayBuffer | Uint8Array, data: string): Promise<ArrayBuffer> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    key instanceof Uint8Array ? key.buffer : key,
+    key instanceof Uint8Array ? (key.buffer as ArrayBuffer) : key,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
@@ -409,7 +409,7 @@ export function createS3Provider(cfg: S3Config): StorageProvider {
         bodyHash = "UNSIGNED-PAYLOAD";
         fetchBody = opts.body;
       } else if (opts.body instanceof Uint8Array || opts.body instanceof ArrayBuffer) {
-        const buf = opts.body instanceof ArrayBuffer ? opts.body : opts.body.buffer;
+        const buf = opts.body instanceof ArrayBuffer ? opts.body : (opts.body.buffer as ArrayBuffer);
         bodyHash = await sha256Hex(new TextDecoder().decode(buf));
         fetchBody = buf;
       }
