@@ -77,6 +77,17 @@ export default {
       );
     }
   },
+
+  // Cron Trigger：每日自动清理（失效分享 + 超期日志）
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    try {
+      await ensureSchema(env);
+      const { runScheduledCleanup } = await import("./cleanup");
+      await runScheduledCleanup(env, ctx);
+    } catch (err) {
+      console.error("scheduled cleanup error:", err);
+    }
+  },
 };
 
 async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

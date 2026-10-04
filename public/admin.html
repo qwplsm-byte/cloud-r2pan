@@ -778,6 +778,12 @@ const I18N = {
     homeRedirectMarket: '下载市场作为首页',
     homeRedirectMarketD: '访客直接访问域名根路径 / 时，自动跳转到下载市场页面（/market）而不是管理后台（/admin）',
     homeRedirectMarketHint: '默认关闭。开启后，您的站点首页就是下载市场，普通访客无法直接看到 /admin。管理员仍然可以通过 /admin 显式访问后台。',
+    // 自动清理（Cron）
+    cronCleanup: '每日自动清理',
+    cronCleanupD: '每天凌晨自动删除失效分享（过期/撤销/达上限）、孤儿文件与超期日志',
+    cronCleanupHint: 'Cron Trigger 于 UTC 19:00（北京时间凌晨 3:00）运行。注意：只被直链引用、没有被任何分享引用的文件不会被删除。',
+    logRetention: '日志保留天数',
+    logRetentionD: '下载日志与登录日志保留天数，超期自动删除（1-3650）',
     codesFloatingBtn: '🎟️ 激活码浮动按钮',
     codesFloatingBtnD: '在分享页右上角（或左上角）显示一个卡片图标，用户点击后可绑定激活码、查询额度、解绑',
     codesFloatingBtnHint: '默认开启。关闭后用户只能通过 URL 参数 ?code=XXX 携带激活码（不推荐）',
@@ -1138,6 +1144,12 @@ const I18N = {
     homeRedirectMarket: 'Marketplace as Homepage',
     homeRedirectMarketD: 'When visitors land on your root domain /, redirect them to the marketplace (/market) instead of the admin panel (/admin)',
     homeRedirectMarketHint: 'Off by default. When enabled, your site homepage becomes the marketplace. Admins can still reach /admin explicitly.',
+    // Auto cleanup (Cron)
+    cronCleanup: 'Daily Auto Cleanup',
+    cronCleanupD: 'Automatically delete expired/revoked/maxed shares, orphan files and aged logs every night',
+    cronCleanupHint: 'Cron Trigger runs at 19:00 UTC (3:00 AM Beijing). Files referenced only by direct links are never deleted.',
+    logRetention: 'Log Retention (days)',
+    logRetentionD: 'Download and login logs older than this are deleted daily (1-3650)',
     codesFloatingBtn: '🎟️ Activation Code Floating Button',
     codesFloatingBtnD: 'Show a card icon on the share page corner. Users can bind/unbind their code and check balance by clicking it.',
     codesFloatingBtnHint: 'On by default. When off, users can only use activation codes via the URL parameter ?code=XXX (not recommended).',
@@ -3370,6 +3382,21 @@ async function loadSettings(){
       </div>
       <div class="tip" style="margin-top:8px">${esc(t('homeRedirectMarketHint'))}</div>
     </div>
+    <!-- 自动清理（Cron）组 -->
+    <div class="glass group">
+      <div class="row">
+        <div class="info"><div class="t">🧹 ${esc(t('cronCleanup'))}</div><div class="d">${esc(t('cronCleanupD'))}</div></div>
+        <label class="switch">
+          <input type="checkbox" id="st-cron-cleanup" ${s.cron_cleanup_enabled !== false ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">${esc(t('logRetention'))}</div><div class="d">${esc(t('logRetentionD'))}</div></div>
+        <input type="number" id="st-log-retention" min="1" max="3650" value="${s.log_retention_days ?? 30}" style="width:110px;padding:9px 12px;border-radius:12px;background:var(--sf-input);border:1px solid var(--stroke-strong);color:var(--text);font-size:14.5px;font-family:inherit;outline:none;text-align:right">
+      </div>
+      <div class="tip" style="margin-top:8px">${esc(t('cronCleanupHint'))}</div>
+    </div>
     <!-- 激活码浮动按钮组 -->
     <div class="glass group">
       <div class="row">
@@ -3635,6 +3662,8 @@ async function loadSettings(){
       home_redirect_market: $('#st-home-market').checked,
       codes_floating_button_enabled: $('#st-codes-float').checked,
       codes_floating_button_position: $('#st-codes-pos').value,
+      cron_cleanup_enabled: $('#st-cron-cleanup').checked,
+      log_retention_days: Number($('#st-log-retention').value) || 30,
       storage_provider: $('#st-backend').value,
     };
     await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });

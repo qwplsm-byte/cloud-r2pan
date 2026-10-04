@@ -736,55 +736,9 @@ export async function handleAdminApi(
 
   // ── 清理失效分享（过期 / 已撤销 / 达上限） + 孤儿 files + 孤儿 R2 对象 ──
   if (path === "/api/admin/shares/cleanup" && method === "POST") {
-    const now = Date.now();
-    // 1. 删除失效 shares
-    const deleted = await env.db.prepare(
-      "DELETE FROM shares WHERE revoked = 1 OR (expires_at IS NOT NULL AND expires_at < ?1) OR (max_downloads IS NOT NULL AND download_count >= max_downloads)"
-    )
-      .bind(now)
-      .run();
-
-    // 2. 查出孤儿 files：没有任何 share 引用的文件（LEFT JOIN 反查）
-    const orphans = await env.db.prepare(
-      `SELECT f.id, f.key FROM files f
-       LEFT JOIN shares s ON s.file_id = f.id
-       WHERE s.id IS NULL`
-    ).all<{ id: string; key: string }>();
-
-    const orphanIds = (orphans.results ?? []).map((o) => o.id);
-    const orphanKeys = (orphans.results ?? []).map((o) => o.key);
-
-    // 3. 删除孤儿 files 的 DB 记录 + 关联 download_logs
-    if (orphanIds.length > 0) {
-      // D1 支持 IN (...) 参数绑定
-      const placeholders = orphanIds.map((_, i) => `?${i + 1}`).join(", ");
-      await env.db.batch([
-        env.db.prepare(`DELETE FROM download_logs WHERE file_id IN (${placeholders})`).bind(...orphanIds),
-        env.db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).bind(...orphanIds),
-      ]);
-    }
-
-    // 4. 异步清理孤儿存储对象（不阻塞响应，批量删除可能慢）
-    if (orphanKeys.length > 0) {
-      ctx.waitUntil(
-        (async () => {
-          const st = await storage(env);
-          for (const key of orphanKeys) {
-            try {
-              await st.delete(key);
-            } catch {
-              // 删除失败不影响 DB 清理结果，静默跳过
-            }
-          }
-        })()
-      );
-    }
-
-    return json({
-      ok: true,
-      deleted_shares: deleted.meta.changes ?? 0,
-      deleted_orphan_files: orphanIds.length,
-    });
+    const { cleanupExpiredShares } = await import("./cleanup");
+    const r = await cleanupExpiredShares(env, ctx);
+    return json({ ok: true, ...r });
   }
 
   // ── 撤销/删除分享 ─────────────────────────────────
@@ -1305,6 +1259,9 @@ export async function handleAdminApi(
       analytics_engine_available: !!env.analytics,
       // UI 主题
       ui_theme: s.uiTheme,
+      // 自动清理（Cron）
+      cron_cleanup_enabled: s.cronCleanupEnabled,
+      log_retention_days: s.logRetentionDays,
       // WebDAV
       webdav_enabled: s.webdavEnabled,
       webdav_username: s.webdavUsername,
@@ -1442,6 +1399,17 @@ export async function handleAdminApi(
       const t = body.ui_theme;
       if (t === "light" || t === "dark") {
         patch.ui_theme = t;
+      }
+    }
+
+    // 自动清理（Cron）
+    if (typeof body.cron_cleanup_enabled === "boolean") {
+      patch.cron_cleanup_enabled = body.cron_cleanup_enabled ? "1" : "0";
+    }
+    if (body.log_retention_days !== undefined) {
+      const n = Number(body.log_retention_days);
+      if (Number.isFinite(n) && n >= 1 && n <= 3650) {
+        patch.log_retention_days = String(Math.floor(n));
       }
     }
 

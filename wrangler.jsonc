@@ -45,5 +45,10 @@
     { "type": "Text", "globs": ["**/*.html"], "fallthrough": true }
   ],
 
+  // Cron Trigger：UTC 19:00 = 北京时间凌晨 3:00 低峰，每日自动清理
+  "triggers": {
+    "crons": ["0 19 * * *"]
+  },
+
   "observability": { "enabled": true }
 }
