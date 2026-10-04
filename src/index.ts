@@ -92,6 +92,21 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return Response.redirect(new URL(target, url).toString(), 302);
   }
 
+  // 健康检查（供 uptime 监控使用，无鉴权）
+  if (path === "/healthz" && req.method === "GET") {
+    const [dbOk, storageOk] = await Promise.all([
+      env.db.prepare("SELECT 1").first().then(() => true).catch(() => false),
+      (async () => {
+        if (!env.r2) return true; // 外部 S3/WebDAV 存储模式时不检查 R2
+        try { await env.r2.list({ limit: 1 }); return true; } catch { return false; }
+      })(),
+    ]);
+    return new Response(JSON.stringify({ ok: dbOk && storageOk, db: dbOk, storage: storageOk, ts: Date.now() }), {
+      status: dbOk && storageOk ? 200 : 503,
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
   // 管理后台页面（/admin/apple 是隐藏的 Apple 玻璃风）
   if (path === "/admin" || path === "/admin/" || path.startsWith("/admin/apple")) {
     return serveAdminPage();
