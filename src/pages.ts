@@ -144,8 +144,8 @@ export function errorPage(
 html, body { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 24px; color: #fff; overflow: hidden; position: relative;
+  min-height: 100vh; min-height: 100svh; display: flex; align-items: center;
+  padding: 24px 16px 64px; color: #fff; overflow-x: hidden; position: relative;
   background: linear-gradient(160deg, #0b1026 0%, #1a1240 45%, #2a1045 100%);
 }
 .orb { position: fixed; border-radius: 50%; filter: blur(90px); opacity: .5; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
@@ -154,7 +154,7 @@ body {
 .o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 55%; left: 8%; animation-delay: -12s; opacity: .35; }
 @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(6vw, -5vh) scale(1.12); } }
 .card {
-  position: relative; width: 100%; max-width: 420px; text-align: center;
+  position: relative; width: 100%; max-width: 420px; margin: auto; text-align: center;
   padding: 56px 36px 44px; border-radius: 32px;
   background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,.05));
   backdrop-filter: blur(32px) saturate(180%); -webkit-backdrop-filter: blur(32px) saturate(180%);

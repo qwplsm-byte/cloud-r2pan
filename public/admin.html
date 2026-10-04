@@ -506,6 +506,10 @@ body {
 }
 .group .row:last-child { border-bottom: none; }
 .group .row:hover { background: var(--tbl-hover); }
+/* 修复：.group 直接子元素（非 .row）自身零内边距，文字会顶到卡片左右边框、在底部圆角处被裁切。
+   含 .row 子元素的容器（如 #passkey-list）自带行内边距，排除。 */
+.group > :not(.row):not(:has(.row)) { padding-left: 18px; padding-right: 18px; }
+.group > .tip { padding-bottom: 14px; }
 .group .row .info { flex: 1; min-width: 0; }
 .group .row .info .t { font-size: 14.5px; font-weight: 600; }
 .group .row .info .d { margin-top: 3px; font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
