@@ -684,6 +684,10 @@ const I18N = {
     sharePasswordHint: '设置后，访客需输入密码才能下载。',
     downloadName: '下载时显示名（可选）', downloadNamePh: '留空则用原始文件名',
     downloadNameHint: '访客下载时看到的文件名，隐藏真实路径中的敏感信息。',
+    // 自定义分享别名
+    shareAlias: '自定义链接别名（可选）',
+    shareAliasPh: '如 my-software',
+    shareAliasHint: '留空则使用随机链接。链接会变成 /s/my-software；仅限字母、数字、- 和 _，创建后不可修改。',
     maxDownloadsLabel: '下载次数上限（留空或 0 = 不限）', unlimitedPlaceholder: '不限',
     maxTip: '达到上限后链接自动失效。单 IP 重复下载限制由「设置」统一控制。',
     generate: '生成链接', shareCreated: '分享链接已创建 ✨', shareCreatedSub: '复制下面的链接发给需要的人',
@@ -1050,6 +1054,10 @@ const I18N = {
     sharePasswordHint: 'When set, visitors must enter a password to download.',
     downloadName: 'Display name on download (optional)', downloadNamePh: 'Leave blank to use original filename',
     downloadNameHint: 'The filename visitors see when they download. Useful for hiding sensitive info in original paths.',
+    // Custom share alias
+    shareAlias: 'Custom Link Alias (optional)',
+    shareAliasPh: 'e.g. my-software',
+    shareAliasHint: 'Leave empty for a random link. The link becomes /s/my-software; letters, digits, - and _ only, cannot be changed later.',
     maxDownloadsLabel: 'Max downloads (empty or 0 = unlimited)', unlimitedPlaceholder: 'Unlimited',
     maxTip: 'The link expires when the cap is reached. Per-IP duplicate limits are controlled in Settings.',
     generate: 'Generate Link', shareCreated: 'Share link created ✨', shareCreatedSub: 'Copy the link below and share it',
@@ -2137,6 +2145,11 @@ function openShareModal(fileId){
       <input type="number" id="sh-max" min="0" placeholder="${esc(t('unlimitedPlaceholder'))}">
       <div class="tip">${esc(t('maxTip'))}</div>
     </div>
+    <div class="field">
+      <label>${esc(t('shareAlias'))}</label>
+      <input type="text" id="sh-alias" placeholder="${esc(t('shareAliasPh'))}" autocomplete="off">
+      <div class="tip">${esc(t('shareAliasHint'))}</div>
+    </div>
     <div class="actions">
       <button class="btn" data-x>${esc(t('cancel'))}</button>
       <button class="btn primary" id="sh-create">${esc(t('generate'))}</button>
@@ -2147,8 +2160,9 @@ function openShareModal(fileId){
     const max = Number($('#sh-max').value) || null;
     const password = $('#sh-pwd').value.trim() || null;
     const download_name = $('#sh-dlname').value.trim() || null;
+    const alias = $('#sh-alias').value.trim() || null;
     try{
-      const r = await api('/api/admin/shares', { method:'POST', body: JSON.stringify({ file_id: fileId, expires_hours: exp, max_downloads: max, password, download_name }) });
+      const r = await api('/api/admin/shares', { method:'POST', body: JSON.stringify({ file_id: fileId, expires_hours: exp, max_downloads: max, password, download_name, alias }) });
       const url = location.origin + r.url;
       openModal(`
         <h3>${esc(t('shareCreated'))}</h3>
@@ -2414,7 +2428,7 @@ async function loadShares(){
           return `
           <tr>
             <td class="name-cell">${ficon(s.file_name)} ${esc(s.file_name)}${s.download_name && s.download_name !== s.file_name ? `<div style="font-size:11px;color:#6ee7b7;margin-top:2px">↳ ${esc(s.download_name)}</div>` : ''}</td>
-            <td class="mono">${s.has_password?'🔒 ':''}<a href="/s/${s.id}" target="_blank" style="color:var(--blue);text-decoration:none">/s/${s.id}</a></td>
+            <td class="mono">${s.has_password?'🔒 ':''}<a href="${s.url || ('/s/' + s.id)}" target="_blank" style="color:var(--blue);text-decoration:none">/s/${s.alias || s.id}</a>${s.alias ? `<div style="font-size:10.5px;color:var(--text-3);margin-top:2px">#${esc(s.id)}</div>` : ''}</td>
             <td class="mono">${pw ? `<span id="pw-${s.id}" style="font-family:ui-monospace,'SF Mono',monospace;color:#fde68a">••••••</span>
               <button class="btn sm" data-pw="${s.id}" data-val="${esc(pw)}" style="padding:2px 8px;font-size:11px;margin-left:4px">👁</button>
               <button class="btn sm" data-cpw="${esc(pw)}" style="padding:2px 8px;font-size:11px">📋</button>` : `<span style="color:var(--text-3)">—</span>`}</td>

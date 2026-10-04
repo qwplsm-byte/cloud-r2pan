@@ -35,7 +35,8 @@ const SCHEMA_STATEMENTS: string[] = [
     is_market INTEGER NOT NULL DEFAULT 0,
     market_views INTEGER NOT NULL DEFAULT 0,
     market_title TEXT,
-    market_desc TEXT
+    market_desc TEXT,
+    alias TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_shares_file ON shares(file_id)`,
   `CREATE INDEX IF NOT EXISTS idx_shares_market ON shares(is_market, revoked)`,
@@ -204,6 +205,9 @@ const MIGRATION_STATEMENTS: string[] = [
   // ═══════════ WebDAV 虚拟目录 ═══════════
   "ALTER TABLE files ADD COLUMN path TEXT NOT NULL DEFAULT '/'",
   "CREATE INDEX IF NOT EXISTS idx_files_path ON files(path)",
+  // ═══════════ 分享自定义别名 ═══════════
+  "ALTER TABLE shares ADD COLUMN alias TEXT",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_shares_alias ON shares(alias)",
 ];
 
 /**
@@ -318,12 +322,14 @@ const EXPECTED_COLUMNS: { table: string; column: string }[] = [
   { table: "shares", column: "market_desc" },
   { table: "download_logs", column: "activation_code" },
   { table: "files", column: "path" },
+  { table: "shares", column: "alias" },
 ];
 
 /** 预期的索引（同样是可能缺失的） */
 const EXPECTED_INDEXES: string[] = [
   "idx_shares_market",
   "idx_files_path",
+  "idx_shares_alias",
 ];
 
 export interface SchemaStatus {

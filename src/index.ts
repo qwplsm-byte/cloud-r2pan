@@ -256,7 +256,8 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   }
 
   // 公开分享页 /s/:token[...]
-  const shareMatch = /^\/s\/([A-Za-z0-9]+)(\/.*)?$/.exec(path);
+  // token 或自定义别名（字母/数字/-/_）
+  const shareMatch = /^\/s\/([A-Za-z0-9_-]+)(\/.*)?$/.exec(path);
   if (shareMatch) {
     await ensureSchema(env);
     const token = shareMatch[1];

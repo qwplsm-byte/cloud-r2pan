@@ -672,10 +672,28 @@ export async function handleAdminApi(
       is_market?: boolean;
       market_title?: string | null;
       market_desc?: string | null;
+      alias?: string | null;
     }>(req);
     if (!body.file_id) return json({ error: msg(req, "缺少 file_id", "Missing file_id") }, 400);
     const file = await env.db.prepare("SELECT id FROM files WHERE id = ?1").bind(body.file_id).first();
     if (!file) return json({ error: msg(req, "文件不存在", "File not found") }, 404);
+    // 自定义别名（可选）：格式 + 保留字 + 唯一性校验
+    const ALIAS_RE = /^[A-Za-z0-9_-]{1,64}$/;
+    const RESERVED = new Set(["admin", "api", "s", "d", "market", "webdav", "oauth", "healthz", "static", "assets", "favicon.ico", "robots.txt", "sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"]);
+    let alias: string | null = null;
+    if (typeof body.alias === "string" && body.alias.trim()) {
+      alias = body.alias.trim();
+      if (!ALIAS_RE.test(alias)) {
+        return json({ error: msg(req, "别名只能包含字母、数字、- 和 _，长度 1-64", "Alias may only contain letters, digits, - and _ (1-64 chars)") }, 400);
+      }
+      if (RESERVED.has(alias.toLowerCase())) {
+        return json({ error: msg(req, "该别名为系统保留字，请换一个", "That alias is reserved, please choose another") }, 400);
+      }
+      const taken = await env.db.prepare("SELECT id FROM shares WHERE alias = ?1").bind(alias).first();
+      if (taken) {
+        return json({ error: msg(req, "该别名已被占用", "Alias already in use") }, 409);
+      }
+    }
     const expiresAt =
       body.expires_hours && body.expires_hours > 0 ? Date.now() + body.expires_hours * 3600_000 : null;
     const maxDownloads =
@@ -694,19 +712,19 @@ export async function handleAdminApi(
       typeof body.market_desc === "string" && body.market_desc.trim() ? body.market_desc.trim() : null;
     const id = randomId(10);
     await env.db.prepare(
-      `INSERT INTO shares(id, file_id, created_at, expires_at, max_downloads, password_hash, password_cipher, download_name, is_market, market_title, market_desc)
-       VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+      `INSERT INTO shares(id, file_id, created_at, expires_at, max_downloads, password_hash, password_cipher, download_name, is_market, market_title, market_desc, alias)
+       VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
     )
-      .bind(id, body.file_id, Date.now(), expiresAt, maxDownloads, passwordHash, passwordCipher, downloadName, isMarket, marketTitle, marketDesc)
+      .bind(id, body.file_id, Date.now(), expiresAt, maxDownloads, passwordHash, passwordCipher, downloadName, isMarket, marketTitle, marketDesc, alias)
       .run();
-    return json({ ok: true, id, url: `/s/${id}` }, 201);
+    return json({ ok: true, id, alias, url: `/s/${alias || id}` }, 201);
   }
 
   // ── 分享列表 ──────────────────────────────────────
   if (path === "/api/admin/shares" && method === "GET") {
     const { results } = await env.db.prepare(
       `SELECT s.id, s.file_id, s.created_at, s.expires_at, s.max_downloads, s.download_count, s.revoked,
-              s.password_hash, s.password_cipher, s.download_name,
+              s.password_hash, s.password_cipher, s.download_name, s.alias,
               s.is_market, s.market_views, s.market_title, s.market_desc,
               f.name AS file_name, f.size AS file_size, f.mime AS file_mime
        FROM shares s JOIN files f ON f.id = s.file_id
@@ -721,7 +739,7 @@ export async function handleAdminApi(
         password_plain: s.password_cipher ? await decryptSecret(s.password_cipher, env.admin) : null,
         password_hash: undefined,
         password_cipher: undefined,
-        url: `/s/${s.id}`,
+        url: `/s/${s.alias || s.id}`,
         status: s.revoked
           ? "revoked"
           : s.expires_at && s.expires_at < now

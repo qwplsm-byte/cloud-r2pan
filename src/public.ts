@@ -241,7 +241,7 @@ async function getShare(env: Env, token: string): Promise<ShareWithFile | null> 
     `SELECT s.id, s.file_id, s.created_at, s.expires_at, s.max_downloads, s.download_count, s.revoked, s.password_hash,
             s.download_name, f.key, f.name, f.size, f.mime
      FROM shares s JOIN files f ON f.id = s.file_id
-     WHERE s.id = ?1`
+     WHERE s.id = ?1 OR (s.alias IS NOT NULL AND s.alias = ?1)`
   )
     .bind(token)
     .first<ShareWithFile>();
