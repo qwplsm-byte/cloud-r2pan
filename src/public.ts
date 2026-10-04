@@ -352,7 +352,10 @@ export async function handleDownload(
   if (row.max_downloads && row.download_count >= row.max_downloads) return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
     { zh: `该资源允许下载 ${row.max_downloads} 次，名额已用完。`, en: `Download limit (${row.max_downloads}) reached.` });
 
-  if (row.max_downloads) {
+  // inline 预览模式：完整走安全校验链，但不消耗下载次数
+  const inline = new URL(req.url).searchParams.get("inline") === "1";
+
+  if (row.max_downloads && !inline) {
     const r = await env.db.prepare(
       `UPDATE shares SET download_count = download_count + 1 WHERE id = ?1 AND download_count < ?2`
     ).bind(token, row.max_downloads).run();
@@ -431,7 +434,7 @@ export async function handleDownload(
     }
   }
 
-  return streamFile(req, env, ctx, row, token, "share");
+  return streamFile(req, env, ctx, row, token, "share", inline);
 }
 
 /**
@@ -555,7 +558,8 @@ async function streamFile(
   ctx: ExecutionContext,
   row: StreamFileRow,
   token: string,
-  kind: "share" | "direct"
+  kind: "share" | "direct",
+  inline = false
 ): Promise<Response> {
   const ip = clientIp(req);
   const ua = req.headers.get("user-agent") ?? "";
@@ -587,9 +591,18 @@ async function streamFile(
   headers.set("accept-ranges", "bytes");
   headers.set("cache-control", "no-store");
   const displayName = row.download_name || row.name;
-  headers.set("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(displayName)}`);
-  const { addSecurityHeaders } = await import("./pages");
-  addSecurityHeaders(headers, { isDownload: true });
+  headers.set("content-disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(displayName)}`);
+  if (inline) {
+    // inline 预览：会以 <img>/<video>/<iframe> 形式加载进同源页面，
+    // X-Frame-Options: DENY 会挡掉 PDF iframe，且下载 CSP（default-src 'none'）会拦 PDF 查看器，
+    // 因此这里改用常规 CSP + SAMEORIGIN（内容仍是本站同源流，无安全面扩大）。
+    const { addSecurityHeaders } = await import("./pages");
+    addSecurityHeaders(headers);
+    headers.set("X-Frame-Options", "SAMEORIGIN");
+  } else {
+    const { addSecurityHeaders } = await import("./pages");
+    addSecurityHeaders(headers, { isDownload: true });
+  }
   const servedLen = range ? range.length : obj.size;
   headers.set("content-length", String(servedLen));
   if (range) {
@@ -601,6 +614,10 @@ async function streamFile(
   const codeId = codeRow ? codeRow.code : null;
   ctx.waitUntil(
     (async () => {
+      // 流量统计始终累计（防止预览绕过流量限额）；
+      // inline 预览不计入下载：不写日志/分析、不扣激活码额度（视频拖动会产生大量 Range 请求，会刷爆日志）
+      await addTraffic(env, bytes);
+      if (inline) return;
       const { browser, os } = parseUA(ua);
 
       if (env.analytics) {
@@ -626,7 +643,6 @@ async function streamFile(
         // 直链也记 download_logs —— share_id 字段存 direct link token 方便追踪
         .bind(token, row.file_id, row.name, ip, ua.slice(0, 500), browser, os, country, bytes, Date.now(), codeId)
         .run();
-      await addTraffic(env, bytes);
       if (codeRow) {
         const dr = await deductQuota(env, codeRow, bytes);
         if (!dr.ok) {

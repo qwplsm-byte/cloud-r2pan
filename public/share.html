@@ -280,6 +280,10 @@ const I18N = {
     quotaWarn: '⚠️ 本月流量已达预设限额，下载服务已临时暂停，请联系管理员。',
     hint: '下载由 {site} 提供 · 请勿重复下载',
     remaining: '剩余',
+    preview: '在线预览',
+    previewCollapse: '收起预览',
+    previewFail: '预览加载失败，请重试',
+    unlocked: '密码正确，可先预览或直接下载',
     copyDirectLink: '复制直链',
     copied: '已复制',
     switchTo: 'EN',
@@ -338,6 +342,10 @@ const I18N = {
     quotaWarn: '⚠️ Monthly traffic quota reached. Downloads are temporarily paused. Please contact the administrator.',
     hint: 'Served by {site} · Please avoid duplicate downloads',
     remaining: 'Remaining',
+    preview: 'Preview Online',
+    previewCollapse: 'Hide Preview',
+    previewFail: 'Preview failed to load, please retry',
+    unlocked: 'Password correct. Preview or download below.',
     copyDirectLink: 'Copy direct link',
     copied: 'Copied',
     switchTo: '中文',
@@ -480,6 +488,25 @@ async function renderTurnstile(containerEl, sitekey){
   });
 }
 
+/** 按预览类型生成内嵌查看器 HTML（图片/视频/音频内嵌，PDF 给新窗口按钮，文本异步拉取） */
+function previewMarkup(type, url){
+  if (type === 'image') return `<img src="${url}" alt="" style="max-width:100%;border-radius:16px;display:block;margin:0 auto">`;
+  if (type === 'video') return `<video src="${url}" controls playsinline preload="metadata" style="width:100%;border-radius:16px;background:rgba(0,0,0,.35);display:block"></video>`;
+  if (type === 'audio') return `<audio src="${url}" controls preload="metadata" style="width:100%"></audio>`;
+  if (type === 'pdf') return `<a class="btn" href="${url}" target="_blank" rel="noopener" style="margin-top:0;background:rgba(255,255,255,.12);font-size:14px">📄 ${esc(LANG === 'zh' ? '打开 PDF 预览' : 'Open PDF Preview')}</a>`;
+  if (type === 'text') {
+    fetch(url).then(r => { if (!r.ok) throw 0; return r.text(); }).then(txt => {
+      const holder = document.querySelector('#preview-box, #pv-holder');
+      if (holder) holder.innerHTML = `<pre style="text-align:left;white-space:pre-wrap;word-break:break-all;max-height:50vh;overflow:auto;padding:14px;border-radius:16px;background:rgba(0,0,0,.35);font-size:12.5px;font-family:ui-monospace,'SF Mono',monospace;color:rgba(255,255,255,.85)">${esc(txt.slice(0, 524288))}</pre>`;
+    }).catch(() => {
+      const holder = document.querySelector('#preview-box, #pv-holder');
+      if (holder) holder.innerHTML = `<div class="warn" style="font-size:12.5px">${esc(t('previewFail'))}</div>`;
+    });
+    return `<div class="spinner" style="width:22px;height:22px;margin:0 auto"></div>`;
+  }
+  return '';
+}
+
 async function boot(){
   // OAuth callback 返回的错误参数 → 页面顶部提示
   const params = new URLSearchParams(location.search);
@@ -517,6 +544,16 @@ function renderError(title,msg){
 
 function render(d, siteName, oauthErr, oauthProviders){
   const ext = extOf(d.name);
+  // 预览类型判定：图片 / 视频 / 音频 / PDF / 文本
+  const mime = (d.mime || '').toLowerCase();
+  const TEXT_EXTS = ['txt','md','log','json','xml','yml','yaml','csv','ini','conf','js','ts','py','css','html','htm','sh','c','cpp','h','java','go','rs','sql','toml','env','gitignore'];
+  const previewType =
+    mime.startsWith('image/') ? 'image'
+    : mime.startsWith('video/') ? 'video'
+    : mime.startsWith('audio/') ? 'audio'
+    : (mime === 'application/pdf' || ext === 'pdf') ? 'pdf'
+    : (mime.startsWith('text/') || TEXT_EXTS.includes(ext)) ? 'text'
+    : null;
   const gone = {
     gone:[t('goneTitle'), t('goneMsg')],
     expired:[t('expiredTitle'), t('expiredMsg')],
@@ -613,6 +650,7 @@ function render(d, siteName, oauthErr, oauthProviders){
         <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         ${esc(t('download'))}
       </a>
+      ${previewType && !d.quota_exceeded && !(oauthEnabled && !oauthAuthed) ? `<button class="btn" id="preview-btn" style="margin-top:10px;background:rgba(255,255,255,.1);font-size:14px">▶ ${esc(t('preview'))}</button><div id="preview-box" style="margin-top:14px;display:none"></div>` : ''}
       ${d.direct_download_url ? `<button class="btn" id="copy-direct" style="margin-top:8px;background:rgba(255,255,255,.1);font-size:12px">📋 ${esc(t('copyDirectLink'))}</button>` : ''}
       <div class="hint">${esc(t('hint', {site: siteName}))}</div>`}
   `;
@@ -657,7 +695,42 @@ function render(d, siteName, oauthErr, oauthProviders){
     };
   }
 
-  if(d.needs_password && $('#pw')) wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAuthed, oauthProviders);
+  if(d.needs_password && $('#pw')) wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAuthed, oauthProviders, previewType);
+
+  // ═══════ 在线预览（无密码分享：点击展开内嵌查看器） ═══════
+  if (previewType && !d.needs_password && !d.quota_exceeded && !(oauthEnabled && !oauthAuthed)) {
+    const pbtn = $('#preview-btn'), pbox = $('#preview-box');
+    const buildInlineUrl = () => {
+      let url = `/s/${token}/download?inline=1`;
+      if (window.__tsToken) url += `&cf=${window.__tsToken}`;
+      const code = getBoundCode();
+      if (code) url += `&code=${encodeURIComponent(code)}`;
+      return url;
+    };
+    let opened = false;
+    pbtn.onclick = async () => {
+      if (opened) { pbox.style.display = 'none'; pbtn.innerHTML = '▶ ' + esc(t('preview')); opened = false; return; }
+      pbtn.innerHTML = '…';
+      try {
+        // on_download / both 模式：预览同样需要先过 Turnstile
+        if (tsEnabled && tsOnDownload && !window.__tsToken) {
+          const tsbox = document.createElement('div');
+          tsbox.style.cssText = 'margin-bottom:12px';
+          pbox.appendChild(tsbox); pbox.style.display = 'block';
+          window.__tsToken = await renderTurnstile(tsbox, ts.sitekey);
+          tsbox.innerHTML = `<div class="ts-passed" style="margin-top:0">${esc(t('turnstilePass'))}</div>`;
+        }
+        pbox.innerHTML = previewMarkup(previewType, buildInlineUrl());
+        pbox.style.display = 'block';
+        pbtn.innerHTML = '⤴ ' + esc(t('previewCollapse'));
+        opened = true;
+      } catch {
+        pbox.innerHTML = `<div class="warn" style="font-size:12.5px">${esc(t('previewFail'))}</div>`;
+        pbox.style.display = 'block';
+        pbtn.innerHTML = '▶ ' + esc(t('preview'));
+      }
+    };
+  }
 
   // ═══════ 激活码浮动按钮 & 弹窗 ═══════
 
@@ -843,7 +916,7 @@ async function triggerDownload(d, ts, tsEnabled, tsOnDownload){
   }
 }
 
-async function wireUnlock(d, ts, tsEnabled, tsOnDownload){
+async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAuthed, oauthProviders, previewType){
   const btn = $('#pw-go'), input = $('#pw'), err = $('#pw-err');
   const unlock = async () => {
     const pass = input.value;
@@ -876,6 +949,7 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload){
       try{ res = await r.json(); }catch{}
       if(r.ok && res.url){
         // on_download 模式需要 cf 参数
+        let dlUrl;
         if(tsEnabled && tsOnDownload && !res.url.includes('cf=')){
           let tk = window.__tsToken;
           if(!tk){
@@ -887,12 +961,22 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload){
             box.innerHTML = `<div class="ts-passed">${esc(t('turnstilePass'))}</div>`;
           }
           const sep = res.url.includes('?') ? '&' : '?';
-          let dlUrl = res.url + sep + 'cf=' + tk;
-          if(code){ const s2 = dlUrl.includes('?') ? '&' : '?'; dlUrl += s2 + 'code=' + encodeURIComponent(code); }
-          location.href = dlUrl;
+          dlUrl = res.url + sep + 'cf=' + tk;
         } else {
-          let dlUrl = res.url;
-          if(code){ const s2 = dlUrl.includes('?') ? '&' : '?'; dlUrl += s2 + 'code=' + encodeURIComponent(code); }
+          dlUrl = res.url;
+        }
+        if(code){ const s2 = dlUrl.includes('?') ? '&' : '?'; dlUrl += s2 + 'code=' + encodeURIComponent(code); }
+        if(previewType){
+          // 解锁成功且可预览：原地展开预览 + 下载按钮，不再直接跳走
+          const box = document.getElementById('pw-box');
+          if(box) box.innerHTML = `
+            <div style="font-size:13.5px;color:#6ee7b7;font-weight:600">✓ ${esc(t('unlocked'))}</div>
+            <div id="pv-holder" style="margin-top:14px">${previewMarkup(previewType, dlUrl + '&inline=1')}</div>
+            <a class="btn" href="${dlUrl}" style="margin-top:16px">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              ${esc(t('download'))}
+            </a>`;
+        } else {
           location.href = dlUrl;
         }
         return;
