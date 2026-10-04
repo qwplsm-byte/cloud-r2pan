@@ -123,6 +123,20 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return serveAdminPage();
   }
 
+  // PWA：manifest / 图标 / Service Worker
+  if (path === "/manifest.webmanifest") {
+    const { serveManifest } = await import("./pwa");
+    return serveManifest(env);
+  }
+  if (path === "/icon-192.png" || path === "/icon-512.png") {
+    const { serveIcon } = await import("./pwa");
+    return serveIcon(path === "/icon-192.png" ? 192 : 512);
+  }
+  if (path === "/sw.js") {
+    const { serveServiceWorker } = await import("./pwa");
+    return serveServiceWorker();
+  }
+
   // 管理 API
   if (path.startsWith("/api/admin/")) {
     return handleAdminApi(req, env, ctx, path);
