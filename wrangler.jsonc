@@ -41,7 +41,10 @@
   //          或执行 npx wrangler secret put admin
 
   // 将 public/*.html 作为文本模块导入
+  // hyalite.js 是液态玻璃引擎（MIT © VII-Cae），也按文本打进 bundle，由 /hyalite.js 路由下发
+  // ⚠️ 必须排在 **/*.html 之前且 fallthrough: true —— 用户规则先于 DEFAULT_MODULE_RULES 匹配
   "rules": [
+    { "type": "Text", "globs": ["**/hyalite.js"], "fallthrough": true },
     { "type": "Text", "globs": ["**/*.html"], "fallthrough": true }
   ],
 

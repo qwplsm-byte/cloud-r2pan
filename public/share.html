@@ -28,9 +28,14 @@ body {
   position: relative; width: 100%; max-width: 440px;
   margin: auto; padding: 48px 36px 40px; border-radius: 36px; text-align: center;
   background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,.05));
-  backdrop-filter: blur(32px) saturate(180%); -webkit-backdrop-filter: blur(32px) saturate(180%);
+  /* 液态玻璃：Chromium 下 --hyalite 是 hyalite 写入的真折射（SDF 透镜位移图 + SVG 滤镜）；
+     Safari / Firefox 不写该变量，后面这份 blur() 兜底照常生效 */
+  backdrop-filter: var(--hyalite, blur(32px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(32px) saturate(180%));
   border: 1px solid rgba(255,255,255,.28);
-  box-shadow: 0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35);
+  /* --hyalite-edge 是 hyalite 的锐利描边（多条 inset 阴影），
+     与投影并列拼接；未挂载时走 fallback，视觉与改造前一致 */
+  box-shadow: var(--hyalite-edge, inset 0 1px 0 rgba(255,255,255,.35)), 0 24px 60px rgba(0,0,0,.45);
   animation: rise .65s cubic-bezier(.22,1.2,.36,1) both;
 }
 /* 内容超过一屏时 margin:auto 自动回退为顶部对齐，保证可滚动、可触达 */
@@ -41,8 +46,11 @@ body {
   width: 104px; height: 104px; margin: 0 auto 24px; border-radius: 30px;
   display: flex; align-items: center; justify-content: center;
   background: linear-gradient(145deg, rgba(255,255,255,.28), rgba(255,255,255,.08));
+  /* 液态玻璃：主图标是页面视觉主角，挂真折射 */
+  backdrop-filter: var(--hyalite, blur(24px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(24px) saturate(180%));
   border: 1px solid rgba(255,255,255,.32);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,.45), 0 14px 34px rgba(0,0,0,.35);
+  box-shadow: var(--hyalite-edge, inset 0 2px 0 rgba(255,255,255,.45)), 0 14px 34px rgba(0,0,0,.35);
   position: relative; overflow: hidden;
 }
 .file-icon::after {
@@ -106,8 +114,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   border-radius: 50%;
   background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.05));
   border: 1px solid rgba(255,255,255,.28);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
+  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; text-decoration: none; z-index: 50;
   box-shadow: 0 8px 22px rgba(0,0,0,.35);
@@ -151,8 +159,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   border-radius: 50%;
   background: linear-gradient(145deg, rgba(10,132,255,.25), rgba(10,132,255,.1));
   border: 1px solid rgba(10,132,255,.45);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
+  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; z-index: 50;
   box-shadow: 0 8px 22px rgba(10,132,255,.25);
@@ -264,6 +272,9 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   </svg>
 </a>
 
+<!-- 液态玻璃引擎（hyalite v0.5.0，MIT © VII-Cae，见 public/hyalite.LICENSE）。
+     必须同步引入：下面的内联脚本会立即调用 Hyalite.watch，用 defer 会导致 undefined。 -->
+<script src="/hyalite.js"></script>
 <script>
 /* ═══════════ i18n ═══════════ */
 const I18N = {
@@ -1004,6 +1015,17 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAut
   };
   btn.onclick = unlock;
   input.addEventListener('keydown', e => { if(e.key === 'Enter') unlock(); });
+}
+
+/* ═══════════ 液态玻璃 ═══════════
+   把毛玻璃升级为真折射：按元素实际尺寸算 SDF 透镜位移图 → SVG 滤镜 → backdrop-filter。
+   只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false，完全不写 --hyalite，
+   CSS 里的 blur() 兜底自动生效，视觉与改造前一致。
+   分两组 watch —— 大面板与小挂件的透镜比例不同：主卡 bevel 必须小于其 36px 内边距，
+   文字才落在清晰区；小圆钮则让透镜铺满整个圆（hyalite 允许 bevel 一直算到圆心）。 */
+if (window.Hyalite && Hyalite.supported()) {
+  Hyalite.watch(document, '.card', { bevel: 26, thickness: 44 });
+  Hyalite.watch(document, '.file-icon, .octo-float, .code-float', { bevel: 14, thickness: 26 });
 }
 
 boot();

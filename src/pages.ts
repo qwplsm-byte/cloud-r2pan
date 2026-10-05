@@ -1,6 +1,7 @@
 import adminHTML from "../public/admin.html";
 import shareHTML from "../public/share.html";
 import marketHTML from "../public/market.html";
+import hyaliteJS from "../public/hyalite.js";
 import { pickLang, type L10n } from "./i18n";
 
 /**
@@ -90,6 +91,34 @@ async function serveStaticHTML(html: string, req: Request): Promise<Response> {
   });
   addSecurityHeaders(headers);
   return new Response(html, { headers });
+}
+
+/**
+ * 液态玻璃引擎 hyalite v0.5.0（MIT © VII-Cae，见 public/hyalite.LICENSE）。
+ *
+ * 单文件、无构建、无 WebGL：按元素实际尺寸算 SDF 透镜位移图，交给 SVG filter，
+ * 再由 `backdrop-filter: url(#…)` 把元素背后的世界弯过来。只有 Chromium 真渲染折射，
+ * Safari / Firefox 回退到 CSS 里的 `blur()` 兜底。
+ *
+ * CSP 前提：位移图是 data: URL，需要 `img-src data:`（本项目已有）。
+ * 走与静态 HTML 相同的 ETag 协商缓存 —— 内容随 bundle 固定。
+ */
+export async function serveHyalite(req: Request): Promise<Response> {
+  const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hyaliteJS));
+  let etag = '"';
+  const bytes = new Uint8Array(hashBytes);
+  for (let i = 0; i < 8; i++) etag += bytes[i].toString(16).padStart(2, "0");
+  etag += '"';
+
+  const ifNoneMatch = req.headers.get("if-none-match");
+  const headers = new Headers({
+    "content-type": "text/javascript;charset=utf-8",
+    "cache-control": "public, max-age=0, must-revalidate",
+    "etag": etag,
+  });
+  addSecurityHeaders(headers);
+  if (ifNoneMatch && ifNoneMatch.includes(etag)) return new Response(null, { status: 304, headers });
+  return new Response(hyaliteJS, { headers });
 }
 
 export async function serveSharePage(req?: Request): Promise<Response> {

@@ -282,7 +282,9 @@ body {
 }
 :root[data-theme="apple"] .topbar,
 :root[data-theme="apple-dark"] .topbar {
-  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  /* 框架层挂液态玻璃：只有顶栏/侧栏/弹窗三个面，卡片列表保持 blur（几十个面挂折射会拖垮渲染） */
+  backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .topbar { border: 1px solid var(--stroke-strong); box-shadow: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25); }
@@ -318,7 +320,8 @@ body {
 }
 :root[data-theme="apple"] .sidebar,
 :root[data-theme="apple-dark"] .sidebar {
-  backdrop-filter: blur(28px) saturate(170%); -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .sidebar { border: 1px solid var(--stroke-strong); box-shadow: 0 16px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22); }
@@ -553,7 +556,8 @@ body {
 @media (min-width: 640px) { .modal { border-radius: 32px; border-bottom: 1px solid var(--stroke); } }
 :root[data-theme="apple"] .modal,
 :root[data-theme="apple-dark"] .modal {
-  backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .modal { border: 1px solid var(--stroke-strong); box-shadow: 0 -20px 60px rgba(0,0,0,.5), var(--shadow-inset-hi); }
@@ -655,6 +659,8 @@ body {
 <div id="toasts"></div>
 <div id="app"><div class="spin"></div></div>
 
+<!-- 液态玻璃引擎（hyalite v0.5.0，MIT © VII-Cae，见 public/hyalite.LICENSE） -->
+<script src="/hyalite.js"></script>
 <script>
 /* ═══════════ i18n ═══════════ */
 const I18N = {
@@ -4511,6 +4517,18 @@ function showRecoveryCodes(codes){
     if (!document.querySelector('#login-view')) showLogin();
   }
 })();
+
+/* ═══════════ 液态玻璃 ═══════════
+   只给框架层挂折射：顶栏、侧栏、弹窗，合计三个 render surface。
+   `.glass` / `.group` 在各视图里有 40+ 处，每个面都要独立开一层，
+   全挂会撞上 hyalite 自己的性能告警（"hundreds are not fine"），
+   也让密集的后台界面变得花哨 —— 故保持原来的 blur。
+   这三条 CSS 都写在 `:root[data-theme="apple*"]` 下、基础态是 backdrop-filter:none，
+   所以非苹果主题下即使挂载了也不会出现折射。 */
+if (window.Hyalite && Hyalite.supported()) {
+  Hyalite.watch(document, '.topbar, .sidebar', { bevel: 16, thickness: 28 });
+  Hyalite.watch(document, '.modal', { bevel: 24, thickness: 40 });
+}
 </script>
 </body>
 </html>

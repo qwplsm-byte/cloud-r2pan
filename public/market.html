@@ -28,7 +28,7 @@ body{
 header{margin-bottom:32px;animation:rise .5s cubic-bezier(.22,1.2,.36,1) both}
 @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-.brand-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.brand-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));backdrop-filter:var(--hyalite,blur(20px));-webkit-backdrop-filter:var(--hyalite,blur(20px));border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3))}
 h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradient(180deg,#fff,#b8c3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .subtitle{font-size:14px;color:rgba(255,255,255,.5);margin-top:4px}
 .toolbar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
@@ -59,13 +59,14 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 .card{
   border-radius:22px;padding:20px;cursor:pointer;position:relative;
   background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
-  backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
+  backdrop-filter:var(--hyalite,blur(24px) saturate(180%));-webkit-backdrop-filter:var(--hyalite,blur(24px) saturate(180%));
   border:1px solid rgba(255,255,255,.22);
-  box-shadow:0 8px 24px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.3);
+  box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 8px 24px rgba(0,0,0,.2);
   transition:transform .2s cubic-bezier(.22,1.2,.36,1),box-shadow .2s,border-color .2s;
   animation:rise .5s cubic-bezier(.22,1.2,.36,1) both;
 }
-.card:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.4);border-color:rgba(56,189,248,.5)}
+/* 悬停态同样要接上 --hyalite-edge，否则一悬停 hyalite 的锐边就消失 */
+.card:hover{transform:translateY(-4px);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.4)),0 18px 40px rgba(0,0,0,.35);border-color:rgba(56,189,248,.5)}
 .card-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px}
 .icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
 .title{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:4px;word-break:break-word}
@@ -156,6 +157,8 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
   </footer>
 </div>
 
+<!-- 液态玻璃引擎（hyalite v0.5.0，MIT © VII-Cae，见 public/hyalite.LICENSE） -->
+<script src="/hyalite.js"></script>
 <script>
 /* ═══════════ i18n ═══════════ */
 const I18N = {
@@ -428,6 +431,16 @@ sortSel.addEventListener("change", () => { state.sort = sortSel.value; state.pag
 
 function renderEmpty(emoji, title, desc){
   grid.innerHTML = `<div class="empty"><div class="emoji">${escapeHtml(emoji)}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(desc)}</p></div>`;
+}
+
+/* ═══════════ 液态玻璃 ═══════════
+   网格卡片是本页主体，一页可能同时挂着十几张 —— 每张都是独立 render surface，
+   所以卡片关掉色散（dispersion:0）：省掉两趟位移 + 两趟合成，单张成本约降一半，
+   折射本身照常保留。brand-icon 是主视觉且只有一张，色散留着。
+   非 Chromium 引擎 supported() 为 false，完全不写 --hyalite，CSS 里的 blur() 兜底生效。 */
+if (window.Hyalite && Hyalite.supported()) {
+  Hyalite.watch(document, '.card', { bevel: 20, thickness: 34, dispersion: 0 });
+  Hyalite.watch(document, '.brand-icon', { bevel: 14, thickness: 26 });
 }
 
 // 初始

@@ -2,7 +2,7 @@ import type { Env } from "./types";
 import { ensureSchema } from "./db";
 import { handleAdminApi } from "./admin";
 import { handleDownload, handleDirectDownload, handleShareInfo, handleVerify } from "./public";
-import { serveAdminPage, serveSharePage, serveMarketPage, errorPage } from "./pages";
+import { serveAdminPage, serveSharePage, serveMarketPage, serveHyalite, errorPage } from "./pages";
 import {
   handleOAuthStart,
   handleOAuthCallback,
@@ -139,6 +139,11 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === "/sw.js") {
     const { serveServiceWorker } = await import("./pwa");
     return serveServiceWorker();
+  }
+
+  // 液态玻璃引擎（hyalite，MIT）—— 三个页面共用一份，ETag 协商缓存
+  if (path === "/hyalite.js" && (req.method === "GET" || req.method === "HEAD")) {
+    return serveHyalite(req);
   }
 
   // 管理 API
