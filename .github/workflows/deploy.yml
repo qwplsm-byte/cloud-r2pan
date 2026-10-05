@@ -1,4 +1,18 @@
-name: Deploy to Cloudflare Workers
+name: CI / Deploy
+
+# ═══════════════════════════════════════════════════════════════
+# 部署策略（2026-10-05 起）
+#
+#   日常部署 → Cloudflare 侧的 Git 集成（Dashboard 连接本仓库），push 即部署。
+#              本 workflow 的 push 分支**不再部署**，否则每次 push 会跑两条链路、
+#              产生两个版本（已发生：5 次 push → 10 个 CF deployment）。
+#
+#   手动兜底 → 哪天 Cloudflare 那边挂了，去 Actions → 本 workflow →
+#              Run workflow 手动触发 deploy job。
+#
+#   类型检查 → push 时仍然跑。这道门禁不能去：CF 的构建走 wrangler/esbuild，
+#              esbuild **只剥离类型、不做类型检查**，没有它 TS 类型错误会直接进生产。
+# ═══════════════════════════════════════════════════════════════
 
 on:
   push:
@@ -6,8 +20,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  # push 时：只做类型检查，不部署
+  typecheck:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+  # 手动触发时：完整部署（Cloudflare 故障时的兜底）
   deploy:
-    # 固定 24.04,避免 ubuntu-latest 迁移到 Ubuntu 26 带来的构建环境漂移
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
