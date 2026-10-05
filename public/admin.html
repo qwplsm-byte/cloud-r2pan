@@ -253,7 +253,7 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 
 /* ── 背景光斑 ─────────────────────────── */
-.orb { position: fixed; border-radius: 50%; filter: blur(100px); opacity: .45; pointer-events: none; animation: drift 22s ease-in-out infinite alternate; z-index: 0; }
+.orb { position: fixed; border-radius: 50%; filter: blur(72px); opacity: .45; pointer-events: none; animation: drift 22s ease-in-out infinite alternate; z-index: 0; }
 .o1 { width: 52vmax; height: 52vmax; background: var(--orb-1); top: -20%; left: -16%; opacity: var(--orb-opacity); }
 .o2 { width: 44vmax; height: 44vmax; background: var(--orb-2); bottom: -22%; right: -12%; animation-delay: -8s; opacity: var(--orb-opacity); }
 .o3 { width: 30vmax; height: 30vmax; background: var(--orb-3); top: 48%; left: 12%; animation-delay: -15s; opacity: var(--orb-opacity); }
@@ -268,10 +268,15 @@ body {
 /* ── 玻璃卡片 ─────────────────────────── */
 .glass {
   background: var(--glass);
-  /* D2：把折射从 apple* 专属下沉为基础能力 —— 现在四个主题都能挂 hyalite。
-     兜底值沿用原 apple 主题调好的参数，未挂载时是普通毛玻璃。 */
-  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  /* ── 性能回退 ──────────────────────────────────────────
+     这条基础规则原本就是 `backdrop-filter: none`（dark/light 主题是纯色底，
+     挂了也看不出折射，我上一轮为了"全主题可挂"改成了 blur）。
+     `.glass` 在各视图里有 20~40 处，每个 backdrop-filter = 一个独立 render
+     surface，滚动时几十层同时重采样背景 —— admin 的卡顿主要来自这里。
+     现在改回 none：dark/light 主题**零 render surface**，与改造前一致。
+     apple / apple-dark 两条覆盖规则（下方）保持不变，那两套是显式开启的玻璃主题。
+     装饰层（高光线 / 色边 / 发丝环）与 box-shadow 全部保留 —— 纯静态 CSS。 */
+  backdrop-filter: none; -webkit-backdrop-filter: none;
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
@@ -517,8 +522,9 @@ body {
   background: var(--glass);
   border: 1px solid var(--stroke);
   box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
-  backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  /* 性能回退：与 .glass 同因 —— 各视图里 20+ 处，几十个 render surface 是卡顿主因。
+     改回 dark/light 主题原本的 none（装饰层与投影保留）。apple* 覆盖规则不变。 */
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 :root[data-theme="apple"] .group,
 :root[data-theme="apple-dark"] .group {
@@ -607,8 +613,8 @@ body {
 .toast {
   padding: 11px 22px; border-radius: 16px; font-size: 14px; font-weight: 600; color: var(--text);
   background: var(--glass-strong);
-  backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  /* 性能回退：改回原本的 none（toast 是临时元素，本来就不值得开一层） */
+  backdrop-filter: none; -webkit-backdrop-filter: none;
   border: 1px solid var(--stroke); box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-toast);
   animation: toastIn .35s cubic-bezier(.22,1.2,.36,1) both; max-width: 86vw; text-align: center;
 }
@@ -699,6 +705,11 @@ body {
 }
 @keyframes lg-specular { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
+/* ⚠️ 性能：这条规则**不带 animation**。
+   lg-shimmer 动的是 background-position → 每帧重绘该元素所在层。
+   上一版铺在 .glass/.group 上，那是每页 20~40 个元素 = 几十路持续重绘，
+   再叠加它们各自的 backdrop-filter，滚动时必然掉帧。
+   后台是密集数据界面，静态高光线本身就合适 —— 全站只保留色边与高光的静态形态。 */
 .glass::before, .group::before, .topbar::before, .sidebar::before, .modal::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
   pointer-events: none; z-index: 3;
@@ -708,7 +719,6 @@ body {
     linear-gradient(105deg, transparent 40%, rgba(255,255,255,.10) 50%, transparent 60%);
   background-size: 100% 100%, 100% 1px, 200% 100%;
   background-repeat: no-repeat;
-  animation: lg-shimmer 7s linear infinite, lg-specular 5s ease-in-out infinite;
 }
 .glass::after, .group::after, .topbar::after, .sidebar::after, .modal::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
@@ -723,6 +733,7 @@ body {
     radial-gradient(ellipse 55% 50% at 88% 50%, rgba(255,100,200,.05) 0%, transparent 70%);
 }
 @media (prefers-reduced-motion: reduce) {
+  /* 本页已无 lg-* 动画，保留此块以便日后加回时自动受 reduced-motion 约束 */
   .glass::before, .group::before, .topbar::before, .sidebar::before, .modal::before { animation: none; }
 }
 </style>
@@ -4592,45 +4603,33 @@ function showRecoveryCodes(codes){
 })();
 
 /* ═══════════ 液态玻璃 ═══════════
-   四套主题现在**全部**具备折射条件（D1 给 dark/light 补了渐变背景 + 光斑 + 半透明面板，
-   D2 把 backdrop-filter 从 apple* 下沉到了基础规则），所以这里可以全量挂载。
+   ── 性能：挂载面从 ~90 砍到 3 ──────────────────────────────
+   上一版挂了三组：
+     .topbar,.sidebar,.modal        2~3
+     .glass,.group                  **20~40（各视图 41+ 处模板）**
+     .btn/.toast/.dropzone/.field…  **30~50**
+   合计可达 90 个 render surface。hyalite 自己的文档写着
+   "a modest number is fine; hundreds are not"，我正好撞在线上。
 
-   只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false → 不写 --hyalite →
-   走 CSS 里的 blur() / none 兜底。
+   三个卡顿来源，本轮分别处理：
+   ① render surface 过多 —— .glass/.group 改回 backdrop-filter:none（原本就是 none），
+      XS 小件整体不再挂载 → admin 默认主题的 backdrop 面从几十个降到 3 个
+   ② 主线程 buildMap —— hyalite 挂载时要逐像素建位移图并编码 PNG，
+      切页/点击时挂几十个 = 主线程连续阻塞几百毫秒 → 点击卡
+   ③ 无限动画重绘 —— 见装饰层处的注释
 
-   ── 位移参数以 hyalite 自带的 DEFAULTS 为基准 ──────────────
-   默认 bevel 37 / thickness 59 / dispersion 1.6（作者调过眼）。
-   上一版我自创了 S 18/32、M 14/26、XS 6/10，位移量只有默认的 1/6，
-   边缘根本弯不进去 —— 这就是"拙劣"的主因。
-   色散（边缘彩虹）是 iOS 的招牌，上一版 M/XS 两档被我关掉了，现在三档全开。
+   现在只挂三个**固定/吸顶**元素：
+     .topbar  sticky，滚动时相对视口不动
+     .sidebar sticky，同上
+     .modal   fixed，只在弹窗打开时存在
+   fixed/sticky 元素是折射最划算的位置 —— 数量恒定、尺寸不变、不随内容滚动。
 
-     S   框架（顶栏/侧栏/弹窗）  bevel 37 / thickness 59 / 色散 1.6
-     M   面板（.glass/.group）    bevel 30 / thickness 48 / 色散 1.6 + sat 1 省 7 节点
-     XS  小件                     bevel 14 / thickness 24 / 色散 1.2 + sat 1 + smooth 0
-
-   ── 被有意排除的元素 ─────────────────────────────
-     .btn.primary   实色渐变，折射会被自己的背景盖掉，挂了等于白占一层
-     .modal-mask    全屏遮罩，挂上去是整屏一个渲染面，成本最高、收益最低
-     .sb-main / .group .row / .switch   background: transparent，没有背景可弯
-
-   ── 若仍嫌卡 ───────────────────────────────────
-     一键降级：Hyalite.setOpts({ dispersion: 0, sat: 1 });
-     彻底关闭：<html data-hyalite="off">（或在控制台 Hyalite.force(false)） */
+   色散关掉（dispersion:0）：省每面 2 趟位移 + 2 趟合成，
+   彩虹边缘由纯 CSS 的 ④ 棱镜色边提供，视觉损失很小。
+   XS 小件、.glass/.group 见上方 CSS 的"性能回退"注释。 */
 if (window.Hyalite && Hyalite.supported()) {
-  // S 档：框架层 —— 直接用 hyalite 的默认水位（上一版 18/32 只有默认的 1/3）
   Hyalite.watch(document, '.topbar, .sidebar, .modal',
-    { bevel: 37, thickness: 59, dispersion: 1.6, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
-
-  // M 档：面板层 —— 色散全开（上一版是 0），位移量不降，只在滤镜层数上省
-  Hyalite.watch(document, '.glass, .group',
-    { bevel: 30, thickness: 48, dispersion: 1.6, shade: .55, rim: 2.0, edge: 1.2,
-      edgeW: 8, sat: 1 });
-
-  // XS 档：小件 —— 位移量从 6/10 提到 14/24，但保持最省的滤镜组合
-  Hyalite.watch(document,
-    '.btn:not(.primary), .toast, .traffic-pill, .dropzone, .upload-item, .field input, .field select',
-    { bevel: 14, thickness: 24, dispersion: 1.2, shade: .45, rim: 1.5, edge: .9,
-      edgeW: 5, sat: 1, smooth: 0 });
+    { bevel: 37, thickness: 59, dispersion: 0, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
 }
 </script>
 </body>

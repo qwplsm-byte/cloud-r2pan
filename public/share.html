@@ -22,7 +22,7 @@ body {
    玻璃只有在背后有色彩与细节时才看得出被弯。原值 .5/.5/.35 太淡，
    这里提到 .78/.78/.55 并新增第 4 个琥珀光斑，制造暖冷对置的区域，
    色散（边缘彩虹）才有颜色可分。 */
-.orb { position: fixed; border-radius: 50%; filter: blur(90px); opacity: .78; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
+.orb { position: fixed; border-radius: 50%; filter: blur(64px); opacity: .78; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
 .o1 { width: 46vmax; height: 46vmax; background: #38bdf8; top: -18%; left: -14%; }
 .o2 { width: 40vmax; height: 40vmax; background: #8b5cf6; bottom: -20%; right: -10%; animation-delay: -6s; }
 .o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 55%; left: 8%; animation-delay: -12s; opacity: .55; }
@@ -302,7 +302,12 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 }
 @keyframes lg-specular { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
 
-/* ③ + ⑥：顶光 / 1px 镜面高光线 / 流光扫过 */
+/* ③ + ⑥：顶光 / 1px 镜面高光线 / 流光条（静态）
+   ⚠️ 性能：这条规则**不带 animation**。
+   lg-shimmer 动的是 background-position → 每帧重绘该元素所在的整层；
+   上一版把它铺到 8 个面上，就是 8 路永不间断的重绘，滚动时与合成器抢帧，
+   直接表现为"滑动卡"。静态高光线本身就是 Apple/GlassKit 卡片的标准样子，
+   视觉损失很小，重绘成本是 8 → 1。 */
 .card::before, .file-icon::before, .octo-float::before, .code-float::before,
 .stat::before, .ts-passed::before, .code-bound-row::before, .code-query-result::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
@@ -313,6 +318,9 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
     linear-gradient(105deg, transparent 40%, rgba(255,255,255,.10) 50%, transparent 60%);
   background-size: 100% 100%, 100% 1px, 200% 100%;
   background-repeat: no-repeat;
+}
+/* 动效只给唯一的主卡：流光（重绘型）+ 呼吸（opacity 可合成） */
+.card::before {
   animation: lg-shimmer 7s linear infinite, lg-specular 5s ease-in-out infinite;
 }
 
@@ -332,11 +340,28 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 }
 /* .file-icon 已用 ::after 做扫光动画，故不参与棱镜层（只拿上面的 ::before） */
 
+/* ═══════════ 性能回退 ═══════════
+   下面这些面**不再挂 hyalite**，也**不再需要 backdrop-filter**。
+   一个没有 backdrop-filter 的元素 = 零 render surface；
+   而 `var(--hyalite, blur(0px)) saturate(…)` 即使没挂载，blur(0px) 仍会让浏览器
+   为它单开一层并在滚动时反复采样背景 —— 白白占显存。
+
+   收回的面：
+     .stat / .ts-passed / .code-bound-row / .code-query-result —— 都在主卡内或紧邻，
+       主卡已经开了折射，再嵌一层就是双倍开销（backdrop-filter 会采样上一层的输出）
+     .pw input / .code-input-row input / .code-btn-row button /
+     .code-modal .close / .unbind-btn —— XS 小件，30~40px 高的控件挂折射既看不出收益，
+       hyalite 又要在主线程逐像素建位移图（buildMap），点击时直接卡顿
+
+   装饰层（③高光线 / ④色边 / ⑤发丝环）全部保留 —— 那是纯静态 CSS，几乎零成本，
+   却是"iOS 感"的主要来源。想要折射回来，把选择器加回下面任一 watch 即可。 */
+.stat, .ts-passed, .code-bound-row, .code-query-result,
+.pw input, .code-input-row input, .code-btn-row button, .code-modal .close, .unbind-btn {
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .card::before, .file-icon::before, .octo-float::before, .code-float::before,
-  .stat::before, .ts-passed::before, .code-bound-row::before, .code-query-result::before {
-    animation: none;
-  }
+  .card::before { animation: none; }
 }
 </style>
 </head>
@@ -1106,35 +1131,26 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAut
 }
 
 /* ═══════════ 液态玻璃 ═══════════
-   只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false → 不写 --hyalite →
-   走 CSS 的 blur()/none 兜底，但 ②提色 ③高光线 ④色边 ⑥流光 都是纯 CSS，
-   它们照样生效（这部分是有意改变：非 Chromium 会比上一版更好看）。
+   只有 Chromium 渲染折射；其余引擎不写 --hyalite → 走兜底。
+   ②提色 ③高光线 ④色边 ⑤发丝环 是纯 CSS，所有浏览器都生效。
 
-   ── 位移参数以 hyalite 自带的 DEFAULTS 为基准 ──────────────
-   它的默认值是 bevel 37 / thickness 59 / dispersion 1.6 / rim 1.76（作者调过眼）。
-   上一版我为了"控性能"自己发明了一套更弱的（S 26/44、XS 6/10），
-   位移量只有默认的 1/6，边缘根本弯不进去 —— 这就是"拙劣"的主因之一。
-   色散（边缘彩虹）更是 iOS 液态玻璃的招牌，上一版在 M/XS 两档被我关掉了，
-   现在三档全开。
+   ── 性能：挂载面从 14 个砍到 4 个 ──────────────────────
+   hyalite 每个挂载面 = 一个独立 render surface + 一次主线程逐像素建图。
+   上一版把 XS 小件和主卡内的中件全挂了，滚动时十几层同时重采样背景、
+   点击时主线程被 buildMap 阻塞 —— 就是"滑动点击都卡"的来源。
 
-   分档只在成本上分级，不再牺牲位移量：
-     S   主卡     bevel 37 / thickness 59 / 色散 1.6 / 锐边 1.4
-     M   中等件   bevel 30 / thickness 48 / 色散 1.6 / 锐边 1.2
-     XS  小件     bevel 14 / thickness 24 / 色散 1.2 / 锐边 0.9 + sat 1 省 7 节点
-
-   ⚠️ 仍不挂 .code-modal（背景 .95 不透明，只透出 5%）与 .code-modal-mask（全屏遮罩）。 */
+   现在只挂真正值得的 4 个：主卡（页面主角）+ 文件图标 + 两个 fixed 圆钮
+   （fixed 不随滚动移动，滚动时不重采样背景，是折射最划算的位置）。
+   XS 小件见下方"性能回退"块。 */
 if (window.Hyalite && Hyalite.supported()) {
+  // 主卡：满效果，保留色散（全页唯一一个跑动效的面）
   Hyalite.watch(document, '.card',
     { bevel: 37, thickness: 59, dispersion: 1.6, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
 
-  Hyalite.watch(document,
-    '.file-icon, .octo-float, .code-float, .stat, .ts-passed, .code-bound-row, .code-query-result',
-    { bevel: 30, thickness: 48, dispersion: 1.6, shade: .55, rim: 2.0, edge: 1.2, edgeW: 8 });
-
-  Hyalite.watch(document,
-    '.pw input, .code-input-row input, .code-btn-row button, .code-modal .close, .unbind-btn, .lang-btn',
-    { bevel: 14, thickness: 24, dispersion: 1.2, shade: .45, rim: 1.5, edge: .9,
-      edgeW: 5, sat: 1, smooth: 0 });
+  // 三个小面：关色散（省 2 趟位移 + 2 趟合成）+ 关饱和增益（省 7 个滤镜节点）
+  Hyalite.watch(document, '.file-icon, .octo-float, .code-float',
+    { bevel: 30, thickness: 48, dispersion: 0, shade: .55, rim: 2.0, edge: 1.2,
+      edgeW: 8, sat: 1 });
 }
 
 boot();

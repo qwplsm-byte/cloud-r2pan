@@ -19,7 +19,7 @@ body{
   padding:24px 20px 80px;min-height:100vh;position:relative;overflow-x:hidden;
 }
 /* ── 背景：折射的原料（原值 .5/.5/.35 太淡，加到 .78/.78/.55 并新增琥珀光斑）── */
-.orb{position:fixed;border-radius:50%;filter:blur(90px);opacity:.78;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
+.orb{position:fixed;border-radius:50%;filter:blur(64px);opacity:.78;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
 .o1{width:46vmax;height:46vmax;background:#38bdf8;top:-18%;left:-14%}
 .o2{width:40vmax;height:40vmax;background:#8b5cf6;bottom:-20%;right:-10%;animation-delay:-6s}
 .o3{width:30vmax;height:30vmax;background:#ec4899;top:55%;left:8%;animation-delay:-12s;opacity:.55}
@@ -61,7 +61,12 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 .card{
   border-radius:22px;padding:20px;cursor:pointer;position:relative;
   background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
-  backdrop-filter:var(--hyalite,blur(24px)) saturate(1.6) brightness(1.08);-webkit-backdrop-filter:var(--hyalite,blur(24px)) saturate(1.6) brightness(1.08);
+  /* 性能：网格卡片回退为普通毛玻璃（改造前就是这一档）。
+     hyalite 每个挂载面 = 独立 render surface + 主线程逐像素建位移图；
+     一页 12+ 张卡全挂折射，滚动时十几层同时重采样背景，点击时 buildMap 抢主线程。
+     装饰层（高光线 / 色边 / 发丝环）保留 —— 纯静态 CSS，几乎零成本。
+     想要折射：把它加回下方 watch，并把这行换回 var(--hyalite, blur(24px)) … */
+  backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);
   border:1px solid rgba(255,255,255,.22);
   box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 0 0 .5px rgba(255,255,255,.10),0 8px 24px rgba(0,0,0,.2);
   transition:transform .2s cubic-bezier(.22,1.2,.36,1),box-shadow .2s,border-color .2s;
@@ -70,7 +75,9 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 /* 悬停态同样要接上 --hyalite-edge，否则一悬停 hyalite 的锐边就消失 */
 .card:hover{transform:translateY(-4px);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.4)),0 0 0 .5px rgba(255,255,255,.14),0 18px 40px rgba(0,0,0,.35);border-color:rgba(56,189,248,.5)}
 .card-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px}
-.icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 0 0 .5px rgba(255,255,255,.10);backdrop-filter:var(--hyalite,blur(0px)) saturate(1.6) brightness(1.08);-webkit-backdrop-filter:var(--hyalite,blur(0px)) saturate(1.6) brightness(1.08)}
+.icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 0 0 .5px rgba(255,255,255,.10)}
+/* 性能：卡内图标**不挂 backdrop-filter**。它嵌在 .card 里，
+   backdrop 会采样上一层已经滤过的输出 = 每张卡双倍开销。装饰层照常保留。 */
 .title{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:4px;word-break:break-word}
 .title .alt{color:rgba(255,255,255,.55);font-weight:400;font-size:13px}
 .desc{font-size:13px;color:rgba(255,255,255,.6);line-height:1.55;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
@@ -125,6 +132,16 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
 @keyframes lg-shimmer{0%{background-position:0 0,0 0,-200% 0}100%{background-position:0 0,0 0,200% 0}}
 @keyframes lg-specular{0%,100%{opacity:.55}50%{opacity:1}}
 
+/* ═══════════════════════════════════════════════════════════
+   液态玻璃装饰层（lg-*）—— 做法取自 Z1Code / GlassKit / nikdelvin
+     ③ 镜面高光线 + ⑥ 流光条 → ::before
+     ④ 棱镜色边              → ::after
+   ⚠️ 性能：这条规则**不带 animation**。
+   lg-shimmer 动的是 background-position → 每帧重绘；上一版铺在
+   .card（一页 12+ 张）与 .icon（每张卡一个，还嵌套在卡里）上，
+   等于二三十路持续重绘 + 双层 backdrop 采样 —— 滚动时必然卡。
+   静态高光线 + 色边已足够撑起质感，动画只留给唯一的品牌图标。
+   ═══════════════════════════════════════════════════════════ */
 .card::before,.brand-icon::before,.icon::before{
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:3;
   background:
@@ -132,6 +149,8 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
     linear-gradient(90deg,transparent 8%,rgba(255,255,255,.50) 50%,transparent 92%),
     linear-gradient(105deg,transparent 40%,rgba(255,255,255,.10) 50%,transparent 60%);
   background-size:100% 100%,100% 1px,200% 100%;background-repeat:no-repeat;
+}
+.brand-icon::before{
   animation:lg-shimmer 7s linear infinite,lg-specular 5s ease-in-out infinite;
 }
 .card::after,.brand-icon::after,.icon::after{
@@ -469,28 +488,24 @@ function renderEmpty(emoji, title, desc){
 }
 
 /* ═══════════ 液态玻璃 ═══════════
-   位移参数以 hyalite 自带的 DEFAULTS（bevel 37 / thickness 59 / dispersion 1.6）为基准。
-   上一版我自创了更弱的一套（XS bevel 6），位移量只有默认的 1/6，边缘弯不进去；
-   色散（边缘彩虹）是 iOS 的招牌，上一版 M/XS 两档关掉了，现在三档全开。
-   分档只在成本上分级，不再牺牲位移量。
-   非 Chromium 不写 --hyalite → 走 blur 兜底，但提色/高光线/色边/流光都是纯 CSS，照样生效。 */
+   ── 性能：挂载面从 ~45 砍到 1 ──────────────────────────────
+   本页原本要挂：.brand-icon(1) + .card(一页 12+) + .icon(每卡一个，**嵌在卡里**)
+   + 4 个小件 ≈ 45 个 render surface，其中 24 个是嵌套双层 ——
+   每个面都要独立采样背景，滚动时就是几十层同时重算，点击时
+   hyalite 还要在主线程逐像素建位移图（buildMap），必然卡。
+
+   现在只挂全页唯一的品牌图标：
+     · 只有 1 个面，成本可忽略
+     · 它在 header 里，尺寸固定 44px，滚动时采样区域小
+   网格卡片回退到改造前的普通 blur（见 .card 处注释），
+   卡内图标不再挂 backdrop（避免嵌套双倍开销）。
+
+   装饰层（高光线 / 色边 / 发丝环）三者全保留 —— 纯静态 CSS，
+   几乎不花成本，却是质感的主要来源。
+   非 Chromium 不写 --hyalite → 走 blur 兜底，但提色/高光/色边/流光照样生效。 */
 if (window.Hyalite && Hyalite.supported()) {
-  // S：全页唯一品牌主视觉
   Hyalite.watch(document, '.brand-icon',
     { bevel: 37, thickness: 59, dispersion: 1.6, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
-
-  // M：网格卡片（一页可能十几张，面大但多；位移量不降，只控滤镜层数）
-  Hyalite.watch(document, '.card',
-    { bevel: 30, thickness: 48, dispersion: 1.6, shade: .55, rim: 2.0, edge: 1.2, edgeW: 8 });
-
-  // M：卡内图标（嵌在 .card 里，额外开一层渲染，参数略收）
-  Hyalite.watch(document, '.icon',
-    { bevel: 24, thickness: 40, dispersion: 1.4, shade: .5, rim: 1.8, edge: 1.1, edgeW: 7 });
-
-  // XS：工具条小件 —— 位移量不再砍，但仍用最省的滤镜组合
-  Hyalite.watch(document, '.search input, .sort select, .pagination button, .lang-btn',
-    { bevel: 14, thickness: 24, dispersion: 1.2, shade: .45, rim: 1.5, edge: .9,
-      edgeW: 5, sat: 1, smooth: 0 });
 }
 
 // 初始
