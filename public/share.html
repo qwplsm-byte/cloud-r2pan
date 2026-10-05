@@ -18,24 +18,35 @@ body {
   background: linear-gradient(160deg, #0b1026 0%, #1a1240 45%, #2a1045 100%);
   -webkit-tap-highlight-color: transparent;
 }
-.orb { position: fixed; border-radius: 50%; filter: blur(90px); opacity: .5; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
+/* ── 背景：折射的"原料" ───────────────────────
+   玻璃只有在背后有色彩与细节时才看得出被弯。原值 .5/.5/.35 太淡，
+   这里提到 .78/.78/.55 并新增第 4 个琥珀光斑，制造暖冷对置的区域，
+   色散（边缘彩虹）才有颜色可分。 */
+.orb { position: fixed; border-radius: 50%; filter: blur(90px); opacity: .78; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
 .o1 { width: 46vmax; height: 46vmax; background: #38bdf8; top: -18%; left: -14%; }
 .o2 { width: 40vmax; height: 40vmax; background: #8b5cf6; bottom: -20%; right: -10%; animation-delay: -6s; }
-.o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 55%; left: 8%; animation-delay: -12s; opacity: .35; }
+.o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 55%; left: 8%; animation-delay: -12s; opacity: .55; }
+.o4 { width: 34vmax; height: 34vmax; background: #f59e0b; top: 14%; right: -10%; animation-delay: -3s; opacity: .5; }
 @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(6vw, -5vh) scale(1.12); } }
 
 .card {
   position: relative; width: 100%; max-width: 440px;
   margin: auto; padding: 48px 36px 40px; border-radius: 36px; text-align: center;
   background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,.05));
-  /* 液态玻璃：Chromium 下 --hyalite 是 hyalite 写入的真折射（SDF 透镜位移图 + SVG 滤镜）；
-     Safari / Firefox 不写该变量，后面这份 blur() 兜底照常生效 */
-  backdrop-filter: var(--hyalite, blur(32px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(32px) saturate(180%));
+  /* ① 位移折射（Chromium）+ ② 全局提色。
+     var() 后追加是合法的 filter 链：
+       var 有值 → url(#hyalite-N) saturate(1.6) brightness(1.08)
+       无值     → blur(32px)      saturate(1.6) brightness(1.08)
+     ② 是上一版完全漏掉的一层 —— nikdelvin 用 1.5/1.1、Z1Code 用 1.7/1.08，
+     没有它，色偏和色散整体发灰。 */
+  backdrop-filter: var(--hyalite, blur(32px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(32px)) saturate(1.6) brightness(1.08);
   border: 1px solid rgba(255,255,255,.28);
-  /* --hyalite-edge 是 hyalite 的锐利描边（多条 inset 阴影），
-     与投影并列拼接；未挂载时走 fallback，视觉与改造前一致 */
-  box-shadow: var(--hyalite-edge, inset 0 1px 0 rgba(255,255,255,.35)), 0 24px 60px rgba(0,0,0,.45);
+  /* 三段拼接：① hyalite 锐边（原位替换原 inset）② 0.5px 发丝环（GlassKit 的 Apple 边）
+     ③ 原投影保持在后 —— 未挂载时阴影顺序与现状一致，只多一条发丝环 */
+  box-shadow: var(--hyalite-edge, inset 0 1px 0 rgba(255,255,255,.35)),
+              0 0 0 .5px rgba(255,255,255,.10),
+              0 24px 60px rgba(0,0,0,.45);
   animation: rise .65s cubic-bezier(.22,1.2,.36,1) both;
 }
 /* 内容超过一屏时 margin:auto 自动回退为顶部对齐，保证可滚动、可触达 */
@@ -46,9 +57,9 @@ body {
   width: 104px; height: 104px; margin: 0 auto 24px; border-radius: 30px;
   display: flex; align-items: center; justify-content: center;
   background: linear-gradient(145deg, rgba(255,255,255,.28), rgba(255,255,255,.08));
-  /* 液态玻璃：主图标是页面视觉主角，挂真折射 */
-  backdrop-filter: var(--hyalite, blur(24px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(24px) saturate(180%));
+  /* 液态玻璃：主图标是页面视觉主角，挂真折射 + ②提色 */
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
   border: 1px solid rgba(255,255,255,.32);
   box-shadow: var(--hyalite-edge, inset 0 2px 0 rgba(255,255,255,.45)), 0 14px 34px rgba(0,0,0,.35);
   position: relative; overflow: hidden;
@@ -69,8 +80,9 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 .stat {
   flex: 1; padding: 14px 8px; border-radius: 20px;
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
-  /* 新增玻璃面：兜底 none，非 Chromium 上外观与改造前完全一致 */
-  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
+  /* 新增玻璃面：兜底 blur(0) 使 ②提色在非 Chromium 上同样生效 */
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
 }
 .stat .v { font-size: 20px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .stat .k { margin-top: 3px; font-size: 12px; color: rgba(255,255,255,.6); }
@@ -117,11 +129,11 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   border-radius: 50%;
   background: linear-gradient(145deg, rgba(255,255,255,.2), rgba(255,255,255,.05));
   border: 1px solid rgba(255,255,255,.28);
-  backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
-  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; text-decoration: none; z-index: 50;
-  box-shadow: 0 8px 22px rgba(0,0,0,.35);
+  box-shadow: 0 0 0 .5px rgba(255,255,255,.10), 0 8px 22px rgba(0,0,0,.35);
   transition: transform .25s cubic-bezier(.22,1.2,.36,1), box-shadow .25s;
 }
 .octo-float:hover { transform: translateY(-3px) scale(1.08); box-shadow: 0 12px 30px rgba(0,0,0,.45); }
@@ -150,7 +162,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   width: 100%; margin-top: 22px; padding: 14px; border-radius: 16px;
   background: rgba(110,231,183,.15); border: 1px solid rgba(110,231,183,.4);
   color: #6ee7b7; font-size: 14px; text-align: center; font-weight: 600;
-  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
 }
 .ts-blocked-title { margin-top: 22px; font-size: 14px; color: #fde68a; font-weight: 600; }
 .ts-blocked-hint { margin-top: 6px; font-size: 12.5px; color: rgba(255,255,255,.6); line-height: 1.6; }
@@ -164,11 +177,11 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   border-radius: 50%;
   background: linear-gradient(145deg, rgba(10,132,255,.25), rgba(10,132,255,.1));
   border: 1px solid rgba(10,132,255,.45);
-  backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
-  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(160%));
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; z-index: 50;
-  box-shadow: 0 8px 22px rgba(10,132,255,.25);
+  box-shadow: 0 0 0 .5px rgba(255,255,255,.10), 0 8px 22px rgba(10,132,255,.25);
   transition: transform .25s cubic-bezier(.22,1.2,.36,1), box-shadow .25s;
 }
 .code-float.position-right {
@@ -195,8 +208,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   width: min(400px, 92vw); max-height: min(86vh, 86svh); overflow-y: auto;
   padding: 26px 24px 22px; border-radius: 28px;
   background: linear-gradient(160deg, rgba(30,28,60,.95), rgba(15,13,38,.96));
-  backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
+  backdrop-filter: var(--hyalite, blur(40px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(40px)) saturate(1.6) brightness(1.08);
   border: 1px solid rgba(255,255,255,.2);
   /* 原投影在前、inset 高光原位替换：未挂载时阴影顺序与改造前完全一致 */
   box-shadow: 0 -20px 60px rgba(0,0,0,.5), var(--hyalite-edge, inset 0 1px 0 rgba(255,255,255,.15));
@@ -216,7 +229,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 .code-bound-row {
   margin-top: 16px; padding: 14px 16px; border-radius: 16px;
   background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35);
-  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
 }
 .code-bound-row .label { font-size: 11px; color: rgba(110,231,183,.8); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
 .code-bound-row .code { font-family: ui-monospace,'SF Mono',monospace; font-size: 14px; color: #6ee7b7; margin-top: 4px; letter-spacing: .03em; }
@@ -257,17 +271,77 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   margin-top: 12px; padding: 12px 14px; border-radius: 12px; font-size: 13px;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
   color: rgba(255,255,255,.8); min-height: 20px;
-  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
+  backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(0px)) saturate(1.6) brightness(1.08);
 }
 .code-query-result.ok { background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.35); color: #6ee7b7; }
 .code-query-result.warn { background: rgba(255,159,10,.12); border-color: rgba(255,159,10,.35); color: #fcd34d; }
 .code-query-result.err { background: rgba(255,69,58,.12); border-color: rgba(255,69,58,.35); color: #fda293; }
 .code-progress { margin-top: 8px; height: 3px; background: rgba(255,255,255,.15); border-radius: 2px; overflow: hidden; }
 .code-progress i { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg,#34d399,#60a5fa); }
+
+/* ═══════════════════════════════════════════════════════════
+   液态玻璃装饰层（lg-*）
+   位移折射由 hyalite 提供（见各页 watch），这里补齐真正的 iOS 观感所
+   需、但折射本身不提供的四层 —— 做法取自 Z1Code/glass-refraction、
+   JUNGHERZ/GlassKit、nikdelvin/liquid-glass 三个仓库的实现。
+
+     ③ 镜面高光线 + ⑥ 流光扫过  → ::before（三层背景叠一个伪元素）
+     ④ 棱镜色边                  → ::after（四边折射不同波长）
+
+   用显式选择器清单而非 class，避免改动 41 处 HTML 模板。
+   只覆盖 S/M 档玻璃面：1px 高光线在 30px 高的小控件上是噪点。
+   ═══════════════════════════════════════════════════════════ */
+
+/* 伪元素需要定位上下文（这些元素原本没有 position） */
+.stat, .ts-passed, .code-bound-row, .code-query-result { position: relative; }
+
+@keyframes lg-shimmer {
+  0%   { background-position: 0 0, 0 0, -200% 0; }
+  100% { background-position: 0 0, 0 0, 200% 0; }
+}
+@keyframes lg-specular { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* ③ + ⑥：顶光 / 1px 镜面高光线 / 流光扫过 */
+.card::before, .file-icon::before, .octo-float::before, .code-float::before,
+.stat::before, .ts-passed::before, .code-bound-row::before, .code-query-result::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; z-index: 3;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.07) 0%, transparent 45%),
+    linear-gradient(90deg, transparent 8%, rgba(255,255,255,.50) 50%, transparent 92%),
+    linear-gradient(105deg, transparent 40%, rgba(255,255,255,.10) 50%, transparent 60%);
+  background-size: 100% 100%, 100% 1px, 200% 100%;
+  background-repeat: no-repeat;
+  animation: lg-shimmer 7s linear infinite, lg-specular 5s ease-in-out infinite;
+}
+
+/* ④：棱镜色边 —— 左蓝右品红，上下绿黄（GlassKit/Z1Code 的四边波长差） */
+.card::after, .octo-float::after, .code-float::after,
+.stat::after, .ts-passed::after, .code-bound-row::after, .code-query-result::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; z-index: 2;
+  box-shadow:
+    inset  1px  0 0 0 rgba(0,180,255,.10),
+    inset -1px  0 0 0 rgba(255,100,200,.10),
+    inset  0  1px 0 0 rgba(100,255,180,.07),
+    inset  0 -1px 0 0 rgba(255,200,55,.07);
+  background:
+    radial-gradient(ellipse 55% 50% at 12% 50%, rgba(0,180,255,.05) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 50% at 88% 50%, rgba(255,100,200,.05) 0%, transparent 70%);
+}
+/* .file-icon 已用 ::after 做扫光动画，故不参与棱镜层（只拿上面的 ::before） */
+
+@media (prefers-reduced-motion: reduce) {
+  .card::before, .file-icon::before, .octo-float::before, .code-float::before,
+  .stat::before, .ts-passed::before, .code-bound-row::before, .code-query-result::before {
+    animation: none;
+  }
+}
 </style>
 </head>
 <body>
-<div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+<div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div><div class="orb o4"></div>
 
 <div class="card" id="app">
   <div class="loading">
@@ -1032,31 +1106,35 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAut
 }
 
 /* ═══════════ 液态玻璃 ═══════════
-   把毛玻璃升级为真折射：按元素实际尺寸算 SDF 透镜位移图 → SVG 滤镜 → backdrop-filter。
-   只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false，完全不写 --hyalite，
-   CSS 里的 blur() / none 兜底生效，视觉与改造前一致。
+   只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false → 不写 --hyalite →
+   走 CSS 的 blur()/none 兜底，但 ②提色 ③高光线 ④色边 ⑥流光 都是纯 CSS，
+   它们照样生效（这部分是有意改变：非 Chromium 会比上一版更好看）。
 
-   分三档传参 —— hyalite 每个面都要独立开一层渲染，色散会多出两趟位移 + 两趟合成，
-   所以面越小参数越省：
-     S   主卡（面大、是页面主角，允许满效果）
-     M   中等面（图标 / 圆钮 / 状态条，色散降到 1.2）
-     XS  输入框与小按钮（面积极小 → 关色散、关 smooth、关饱和增益）
+   ── 位移参数以 hyalite 自带的 DEFAULTS 为基准 ──────────────
+   它的默认值是 bevel 37 / thickness 59 / dispersion 1.6 / rim 1.76（作者调过眼）。
+   上一版我为了"控性能"自己发明了一套更弱的（S 26/44、XS 6/10），
+   位移量只有默认的 1/6，边缘根本弯不进去 —— 这就是"拙劣"的主因之一。
+   色散（边缘彩虹）更是 iOS 液态玻璃的招牌，上一版在 M/XS 两档被我关掉了，
+   现在三档全开。
 
-   ⚠️ 故意不挂 .code-modal 与 .code-modal-mask：
-     前者背景 rgba(30,28,60,.95) 只透出 5%，折射再准也看不见，纯属白占一层渲染；
-     后者是全屏遮罩 rgba(0,0,0,.55)，挂上去等于整屏开一个渲染面，成本最高收益最低。
-     两者 CSS 已转成 var(--hyalite, 原值)，但从不写入 --hyalite → 永远走原 blur。
-     想要的话在下面任一 watch 的选择器里加上即可。 */
+   分档只在成本上分级，不再牺牲位移量：
+     S   主卡     bevel 37 / thickness 59 / 色散 1.6 / 锐边 1.4
+     M   中等件   bevel 30 / thickness 48 / 色散 1.6 / 锐边 1.2
+     XS  小件     bevel 14 / thickness 24 / 色散 1.2 / 锐边 0.9 + sat 1 省 7 节点
+
+   ⚠️ 仍不挂 .code-modal（背景 .95 不透明，只透出 5%）与 .code-modal-mask（全屏遮罩）。 */
 if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.card', { bevel: 26, thickness: 44 });
+  Hyalite.watch(document, '.card',
+    { bevel: 37, thickness: 59, dispersion: 1.6, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
 
   Hyalite.watch(document,
     '.file-icon, .octo-float, .code-float, .stat, .ts-passed, .code-bound-row, .code-query-result',
-    { bevel: 14, thickness: 26, dispersion: 1.2 });
+    { bevel: 30, thickness: 48, dispersion: 1.6, shade: .55, rim: 2.0, edge: 1.2, edgeW: 8 });
 
   Hyalite.watch(document,
     '.pw input, .code-input-row input, .code-btn-row button, .code-modal .close, .unbind-btn, .lang-btn',
-    { bevel: 6, thickness: 10, dispersion: 0, smooth: 0, sat: 1, rim: 1 });
+    { bevel: 14, thickness: 24, dispersion: 1.2, shade: .45, rim: 1.5, edge: .9,
+      edgeW: 5, sat: 1, smooth: 0 });
 }
 
 boot();

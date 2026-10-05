@@ -18,17 +18,19 @@ body{
   color:#fff;background:linear-gradient(160deg,#0b1026 0%,#1a1240 45%,#2a1045 100%);
   padding:24px 20px 80px;min-height:100vh;position:relative;overflow-x:hidden;
 }
-.orb{position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
+/* ── 背景：折射的原料（原值 .5/.5/.35 太淡，加到 .78/.78/.55 并新增琥珀光斑）── */
+.orb{position:fixed;border-radius:50%;filter:blur(90px);opacity:.78;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
 .o1{width:46vmax;height:46vmax;background:#38bdf8;top:-18%;left:-14%}
 .o2{width:40vmax;height:40vmax;background:#8b5cf6;bottom:-20%;right:-10%;animation-delay:-6s}
-.o3{width:30vmax;height:30vmax;background:#ec4899;top:55%;left:8%;animation-delay:-12s;opacity:.35}
+.o3{width:30vmax;height:30vmax;background:#ec4899;top:55%;left:8%;animation-delay:-12s;opacity:.55}
+.o4{width:34vmax;height:34vmax;background:#f59e0b;top:14%;right:-10%;animation-delay:-3s;opacity:.5}
 @keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(6vw,-5vh) scale(1.12)}}
 
 .container{max-width:1200px;margin:0 auto;position:relative;z-index:1}
 header{margin-bottom:32px;animation:rise .5s cubic-bezier(.22,1.2,.36,1) both}
 @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-.brand-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));backdrop-filter:var(--hyalite,blur(20px));-webkit-backdrop-filter:var(--hyalite,blur(20px));border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3))}
+.brand-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));backdrop-filter:var(--hyalite,blur(0px)) saturate(1.6) brightness(1.08);-webkit-backdrop-filter:var(--hyalite,blur(0px)) saturate(1.6) brightness(1.08);border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 0 0 .5px rgba(255,255,255,.10)}
 h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradient(180deg,#fff,#b8c3ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .subtitle{font-size:14px;color:rgba(255,255,255,.5);margin-top:4px}
 .toolbar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
@@ -59,16 +61,16 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 .card{
   border-radius:22px;padding:20px;cursor:pointer;position:relative;
   background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
-  backdrop-filter:var(--hyalite,blur(24px) saturate(180%));-webkit-backdrop-filter:var(--hyalite,blur(24px) saturate(180%));
+  backdrop-filter:var(--hyalite,blur(24px)) saturate(1.6) brightness(1.08);-webkit-backdrop-filter:var(--hyalite,blur(24px)) saturate(1.6) brightness(1.08);
   border:1px solid rgba(255,255,255,.22);
-  box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 8px 24px rgba(0,0,0,.2);
+  box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 0 0 .5px rgba(255,255,255,.10),0 8px 24px rgba(0,0,0,.2);
   transition:transform .2s cubic-bezier(.22,1.2,.36,1),box-shadow .2s,border-color .2s;
   animation:rise .5s cubic-bezier(.22,1.2,.36,1) both;
 }
 /* 悬停态同样要接上 --hyalite-edge，否则一悬停 hyalite 的锐边就消失 */
-.card:hover{transform:translateY(-4px);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.4)),0 18px 40px rgba(0,0,0,.35);border-color:rgba(56,189,248,.5)}
+.card:hover{transform:translateY(-4px);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.4)),0 0 0 .5px rgba(255,255,255,.14),0 18px 40px rgba(0,0,0,.35);border-color:rgba(56,189,248,.5)}
 .card-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px}
-.icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3));backdrop-filter:var(--hyalite,none);-webkit-backdrop-filter:var(--hyalite,none)}
+.icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3)),0 0 0 .5px rgba(255,255,255,.10);backdrop-filter:var(--hyalite,blur(0px)) saturate(1.6) brightness(1.08);-webkit-backdrop-filter:var(--hyalite,blur(0px)) saturate(1.6) brightness(1.08)}
 .title{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:4px;word-break:break-word}
 .title .alt{color:rgba(255,255,255,.55);font-weight:400;font-size:13px}
 .desc{font-size:13px;color:rgba(255,255,255,.6);line-height:1.55;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
@@ -111,10 +113,43 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
 
 .lang-btn{margin-left:10px;padding:4px 13px;border-radius:11px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);color:#fff;font-size:12px;cursor:pointer;backdrop-filter:var(--hyalite,blur(10px));transition:all .15s}
 .lang-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+
+/* ═══════════════════════════════════════════════════════════
+   液态玻璃装饰层（lg-*）—— 做法取自 Z1Code / GlassKit / nikdelvin
+     ③ 镜面高光线 + ⑥ 流光扫过 → ::before
+     ④ 棱镜色边                → ::after
+   只覆盖 S/M 档玻璃面（XS 小件不挂，1px 高光线在小控件上是噪点）。
+   ═══════════════════════════════════════════════════════════ */
+.brand-icon,.icon{position:relative}
+
+@keyframes lg-shimmer{0%{background-position:0 0,0 0,-200% 0}100%{background-position:0 0,0 0,200% 0}}
+@keyframes lg-specular{0%,100%{opacity:.55}50%{opacity:1}}
+
+.card::before,.brand-icon::before,.icon::before{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:3;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.07) 0%,transparent 45%),
+    linear-gradient(90deg,transparent 8%,rgba(255,255,255,.50) 50%,transparent 92%),
+    linear-gradient(105deg,transparent 40%,rgba(255,255,255,.10) 50%,transparent 60%);
+  background-size:100% 100%,100% 1px,200% 100%;background-repeat:no-repeat;
+  animation:lg-shimmer 7s linear infinite,lg-specular 5s ease-in-out infinite;
+}
+.card::after,.brand-icon::after,.icon::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;
+  box-shadow:
+    inset  1px  0 0 0 rgba(0,180,255,.10),
+    inset -1px  0 0 0 rgba(255,100,200,.10),
+    inset  0  1px 0 0 rgba(100,255,180,.07),
+    inset  0 -1px 0 0 rgba(255,200,55,.07);
+  background:
+    radial-gradient(ellipse 55% 50% at 12% 50%,rgba(0,180,255,.05) 0%,transparent 70%),
+    radial-gradient(ellipse 55% 50% at 88% 50%,rgba(255,100,200,.05) 0%,transparent 70%);
+}
+@media (prefers-reduced-motion:reduce){.card::before,.brand-icon::before,.icon::before{animation:none}}
 </style>
 </head>
 <body>
-<div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+<div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div><div class="orb o4"></div>
 <div class="container">
   <header>
     <div class="brand">
@@ -434,20 +469,28 @@ function renderEmpty(emoji, title, desc){
 }
 
 /* ═══════════ 液态玻璃 ═══════════
-   只有 Chromium 渲染折射；其余引擎 supported() 为 false → 不写 --hyalite → 走原 blur，外观不变。
-   分三档（hyalite 每个面独占一层渲染）：
-     S   .brand-icon —— 全页唯一的品牌主视觉，只有一张，保留色散
-     M   .card       —— 网格一页可能十几张，关色散（dispersion:0）省掉两趟位移 + 两趟合成
-     XS  卡内图标与工具条小件 —— 面积极小，关色散 + 关 smooth + 关饱和增益
-   注意 .icon 嵌在 .card 里，会额外开一层渲染面，所以给它最省的一档。 */
+   位移参数以 hyalite 自带的 DEFAULTS（bevel 37 / thickness 59 / dispersion 1.6）为基准。
+   上一版我自创了更弱的一套（XS bevel 6），位移量只有默认的 1/6，边缘弯不进去；
+   色散（边缘彩虹）是 iOS 的招牌，上一版 M/XS 两档关掉了，现在三档全开。
+   分档只在成本上分级，不再牺牲位移量。
+   非 Chromium 不写 --hyalite → 走 blur 兜底，但提色/高光线/色边/流光都是纯 CSS，照样生效。 */
 if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.brand-icon', { bevel: 14, thickness: 26 });
+  // S：全页唯一品牌主视觉
+  Hyalite.watch(document, '.brand-icon',
+    { bevel: 37, thickness: 59, dispersion: 1.6, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
 
-  Hyalite.watch(document, '.card', { bevel: 20, thickness: 34, dispersion: 0 });
+  // M：网格卡片（一页可能十几张，面大但多；位移量不降，只控滤镜层数）
+  Hyalite.watch(document, '.card',
+    { bevel: 30, thickness: 48, dispersion: 1.6, shade: .55, rim: 2.0, edge: 1.2, edgeW: 8 });
 
-  Hyalite.watch(document,
-    '.icon, .search input, .sort select, .pagination button, .lang-btn',
-    { bevel: 6, thickness: 10, dispersion: 0, smooth: 0, sat: 1, rim: 1 });
+  // M：卡内图标（嵌在 .card 里，额外开一层渲染，参数略收）
+  Hyalite.watch(document, '.icon',
+    { bevel: 24, thickness: 40, dispersion: 1.4, shade: .5, rim: 1.8, edge: 1.1, edgeW: 7 });
+
+  // XS：工具条小件 —— 位移量不再砍，但仍用最省的滤镜组合
+  Hyalite.watch(document, '.search input, .sort select, .pagination button, .lang-btn',
+    { bevel: 14, thickness: 24, dispersion: 1.2, shade: .45, rim: 1.5, edge: .9,
+      edgeW: 5, sat: 1, smooth: 0 });
 }
 
 // 初始

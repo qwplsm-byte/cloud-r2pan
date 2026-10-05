@@ -10,14 +10,14 @@
    默认主题：简洁暗色（无玻璃模糊）
    ═══════════════════════════════════════════════════════════ */
 :root {
-  /* ── 液态玻璃（D1）──────────────────────────────
+  /* ── 液态玻璃（D1 + C 节提色）────────────────────────────
      原值：--bg-page:#0f0f10 · --orb-*:transparent · --orb-opacity:0 · --glass:#1c1c1f · --glass-strong:#242428
-     改造原因：折射必须有"背景内容"可弯。原先是**纯色背景 + 不透明面板 + 光斑关闭**，
-     等于即便挂上 hyalite 也什么都看不见（面板 100% 不透光，背景是一整块平色）。
-     现在：渐变底 + 三个光斑提供细节，面板改半透明把背景透出来。 */
-  --bg-page: linear-gradient(165deg, #0d0f16 0%, #131722 46%, #171a28 100%);
+     折射必须有"背景内容"可弯。原先是纯色背景 + 不透明面板 + 光斑关闭，
+     挂上 hyalite 也什么都看不见。
+     C 节再把光斑从 .32 提到 .58、渐变换更饱满 —— 上一版太淡，弯出来没料。 */
+  --bg-page: linear-gradient(165deg, #0c1020 0%, #161a33 42%, #241442 100%);
   --orb-1: #22d3ee; --orb-2: #7c5cf6; --orb-3: #ec4899;
-  --orb-opacity: .32;
+  --orb-opacity: .58;
 
   --glass: rgba(255,255,255,.07);
   --glass-strong: rgba(255,255,255,.11);
@@ -76,9 +76,10 @@
   /* ── 液态玻璃（D1）：与 dark 主题同样改造 ─────────────────
      原值：--bg-page:#f5f5f7 · --orb-*:transparent · --orb-opacity:0 · --glass:#ffffff · --glass-strong:#ffffff
      切主题按钮在 dark ↔ light 之间来回切，只改 dark 的话点一下就"失去玻璃"。 */
-  --bg-page: linear-gradient(180deg, #f8f9fd 0%, #eef1f8 55%, #e9edf7 100%);
+  /* C 节提色：光斑 .22 → .42，让浅色底也有可弯的色彩 */
+  --bg-page: linear-gradient(180deg, #f6f8fe 0%, #ecf0fa 55%, #e4eaf7 100%);
   --orb-1: #38bdf8; --orb-2: #a78bfa; --orb-3: #f472b6;
-  --orb-opacity: .22;
+  --orb-opacity: .42;
 
   --glass: rgba(255,255,255,.72);
   --glass-strong: rgba(255,255,255,.84);
@@ -269,16 +270,16 @@ body {
   background: var(--glass);
   /* D2：把折射从 apple* 专属下沉为基础能力 —— 现在四个主题都能挂 hyalite。
      兜底值沿用原 apple 主题调好的参数，未挂载时是普通毛玻璃。 */
-  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
-  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-glass);
+  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
 }
 :root[data-theme="apple"] .glass,
 :root[data-theme="apple-dark"] .glass {
-  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
-  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .glass { border: 1px solid var(--stroke-strong); }
@@ -288,16 +289,16 @@ body {
   position: sticky; top: 12px; z-index: 50; margin-bottom: 22px;
   display: flex; align-items: center; gap: 12px; padding: 12px 18px;
   background: var(--glass-strong);
-  backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
+  backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
   border: 1px solid var(--stroke); border-radius: 22px;
-  box-shadow: var(--shadow-topbar-box);
+  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-topbar-box);
 }
 :root[data-theme="apple"] .topbar,
 :root[data-theme="apple-dark"] .topbar {
   /* D2 已把折射下沉为基础能力，四个主题共用这条（apple* 仍有各自的边框/阴影差异） */
-  backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
+  backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .topbar { border: 1px solid var(--stroke-strong); box-shadow: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25); }
@@ -326,17 +327,17 @@ body {
 .sidebar {
   flex: none; width: 188px; padding: 14px 10px;
   background: var(--glass);
-  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
-  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
   border: 1px solid var(--stroke); border-radius: 22px;
-  box-shadow: var(--shadow-glass);
+  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
   display: flex; flex-direction: column; gap: 4px; position: sticky; top: 90px;
   max-height: calc(100vh - 110px); overflow-y: auto; scrollbar-width: thin;
 }
 :root[data-theme="apple"] .sidebar,
 :root[data-theme="apple-dark"] .sidebar {
-  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
-  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .sidebar { border: 1px solid var(--stroke-strong); box-shadow: 0 16px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22); }
@@ -515,20 +516,20 @@ body {
   border-radius: 20px; overflow: hidden; margin-bottom: 16px;
   background: var(--glass);
   border: 1px solid var(--stroke);
-  box-shadow: var(--shadow-glass);
-  backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
+  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
+  backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
 }
 :root[data-theme="apple"] .group,
 :root[data-theme="apple-dark"] .group {
   border: 0.5px solid rgba(0,0,0,.08);
-  backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
+  backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
 }
 :root[data-theme="apple-dark"] .group {
   background: linear-gradient(150deg, rgba(255,255,255,.1), rgba(255,255,255,.045));
   border: 1px solid var(--stroke-strong);
-  box-shadow: var(--shadow-glass);
+  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
 }
 .group .row {
   display: flex; align-items: center; gap: 12px; padding: 14px 18px;
@@ -571,17 +572,17 @@ body {
   width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
   padding: 26px; border-radius: 32px 32px 0 0;
   background: var(--glass-strong);
-  backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
+  backdrop-filter: var(--hyalite, blur(40px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(40px)) saturate(1.6) brightness(1.08);
   border: 1px solid var(--stroke); border-bottom: none;
-  box-shadow: var(--shadow-modal);
+  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-modal);
   animation: sheetUp .4s cubic-bezier(.22,1.1,.36,1) both;
 }
 @media (min-width: 640px) { .modal { border-radius: 32px; border-bottom: 1px solid var(--stroke); } }
 :root[data-theme="apple"] .modal,
 :root[data-theme="apple-dark"] .modal {
-  backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
-  -webkit-backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
+  backdrop-filter: var(--hyalite, blur(40px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(40px)) saturate(1.6) brightness(1.08);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .modal { border: 1px solid var(--stroke-strong); box-shadow: 0 -20px 60px rgba(0,0,0,.5), var(--shadow-inset-hi); }
@@ -606,15 +607,15 @@ body {
 .toast {
   padding: 11px 22px; border-radius: 16px; font-size: 14px; font-weight: 600; color: var(--text);
   background: var(--glass-strong);
-  backdrop-filter: var(--hyalite, blur(20px));
-  -webkit-backdrop-filter: var(--hyalite, blur(20px));
-  border: 1px solid var(--stroke); box-shadow: var(--shadow-toast);
+  backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  border: 1px solid var(--stroke); box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-toast);
   animation: toastIn .35s cubic-bezier(.22,1.2,.36,1) both; max-width: 86vw; text-align: center;
 }
 :root[data-theme="apple"] .toast,
 :root[data-theme="apple-dark"] .toast {
-  backdrop-filter: var(--hyalite, blur(20px));
-  -webkit-backdrop-filter: var(--hyalite, blur(20px));
+  backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
+  -webkit-backdrop-filter: var(--hyalite, blur(20px)) saturate(1.6) brightness(1.08);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 .toast.ok { border-color: rgba(52,211,153,.5); }
@@ -677,6 +678,52 @@ body {
   .group .row input[type=number], .group .row input[type=text],
   .link-box input, .section input[type=text], .section input[type=password],
   .section input[type=number], .section select, .modal input[type=number] { font-size: 16px !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   液态玻璃装饰层（lg-*）—— 做法取自 Z1Code / GlassKit / nikdelvin
+     ③ 镜面高光线 + ⑥ 流光扫过 → ::before
+     ④ 棱镜色边                → ::after
+   覆盖 S/M 档玻璃面；XS 小件（.btn/.toast/.field input…）不挂 ——
+   1px 高光线在 40px 高的控件上只是噪点。
+
+   定位上下文已核对：.topbar/.sidebar 本身是 sticky，
+   .glass/.group/.modal 补 position:relative；全站仅有的 3 处绝对定位
+   （.chart .bar span、.switch .track/.thumb）都已各自 relative，不受影响。
+   ═══════════════════════════════════════════════════════════ */
+.glass, .group, .modal { position: relative; }
+
+@keyframes lg-shimmer {
+  0%   { background-position: 0 0, 0 0, -200% 0; }
+  100% { background-position: 0 0, 0 0, 200% 0; }
+}
+@keyframes lg-specular { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+.glass::before, .group::before, .topbar::before, .sidebar::before, .modal::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; z-index: 3;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.07) 0%, transparent 45%),
+    linear-gradient(90deg, transparent 8%, rgba(255,255,255,.50) 50%, transparent 92%),
+    linear-gradient(105deg, transparent 40%, rgba(255,255,255,.10) 50%, transparent 60%);
+  background-size: 100% 100%, 100% 1px, 200% 100%;
+  background-repeat: no-repeat;
+  animation: lg-shimmer 7s linear infinite, lg-specular 5s ease-in-out infinite;
+}
+.glass::after, .group::after, .topbar::after, .sidebar::after, .modal::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; z-index: 2;
+  box-shadow:
+    inset  1px  0 0 0 rgba(0,180,255,.10),
+    inset -1px  0 0 0 rgba(255,100,200,.10),
+    inset  0  1px 0 0 rgba(100,255,180,.07),
+    inset  0 -1px 0 0 rgba(255,200,55,.07);
+  background:
+    radial-gradient(ellipse 55% 50% at 12% 50%, rgba(0,180,255,.05) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 50% at 88% 50%, rgba(255,100,200,.05) 0%, transparent 70%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass::before, .group::before, .topbar::before, .sidebar::before, .modal::before { animation: none; }
 }
 </style>
 </head>
@@ -4551,12 +4598,15 @@ function showRecoveryCodes(codes){
    只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false → 不写 --hyalite →
    走 CSS 里的 blur() / none 兜底。
 
-   ── 分三档控成本（hyalite 每个面独占一层渲染）──────────────────
-   色散会多出两趟位移 + 两趟合成，sat!==1 会多出 7 个滤镜节点，所以按面的大小配参数：
+   ── 位移参数以 hyalite 自带的 DEFAULTS 为基准 ──────────────
+   默认 bevel 37 / thickness 59 / dispersion 1.6（作者调过眼）。
+   上一版我自创了 S 18/32、M 14/26、XS 6/10，位移量只有默认的 1/6，
+   边缘根本弯不进去 —— 这就是"拙劣"的主因。
+   色散（边缘彩虹）是 iOS 的招牌，上一版 M/XS 两档被我关掉了，现在三档全开。
 
-     S   框架（顶栏 / 侧栏 / 弹窗）—— 全页就这3个，允许满效果
-     M   面板（.glass / .group）—— 各视图里几十处，关色散 + 关饱和增益（省 4 趟合成 + 7 节点）
-     XS  小件（按钮 / 提示 / 输入框 / 上传条）—— 面积极小，参数压到最低
+     S   框架（顶栏/侧栏/弹窗）  bevel 37 / thickness 59 / 色散 1.6
+     M   面板（.glass/.group）    bevel 30 / thickness 48 / 色散 1.6 + sat 1 省 7 节点
+     XS  小件                     bevel 14 / thickness 24 / 色散 1.2 + sat 1 + smooth 0
 
    ── 被有意排除的元素 ─────────────────────────────
      .btn.primary   实色渐变，折射会被自己的背景盖掉，挂了等于白占一层
@@ -4567,17 +4617,20 @@ function showRecoveryCodes(codes){
      一键降级：Hyalite.setOpts({ dispersion: 0, sat: 1 });
      彻底关闭：<html data-hyalite="off">（或在控制台 Hyalite.force(false)） */
 if (window.Hyalite && Hyalite.supported()) {
-  // S 档：框架层
-  Hyalite.watch(document, '.topbar, .sidebar, .modal', { bevel: 18, thickness: 32 });
+  // S 档：框架层 —— 直接用 hyalite 的默认水位（上一版 18/32 只有默认的 1/3）
+  Hyalite.watch(document, '.topbar, .sidebar, .modal',
+    { bevel: 37, thickness: 59, dispersion: 1.6, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
 
-  // M 档：面板层
+  // M 档：面板层 —— 色散全开（上一版是 0），位移量不降，只在滤镜层数上省
   Hyalite.watch(document, '.glass, .group',
-    { bevel: 14, thickness: 26, dispersion: 0, sat: 1 });
+    { bevel: 30, thickness: 48, dispersion: 1.6, shade: .55, rim: 2.0, edge: 1.2,
+      edgeW: 8, sat: 1 });
 
-  // XS 档：小件
+  // XS 档：小件 —— 位移量从 6/10 提到 14/24，但保持最省的滤镜组合
   Hyalite.watch(document,
     '.btn:not(.primary), .toast, .traffic-pill, .dropzone, .upload-item, .field input, .field select',
-    { bevel: 6, thickness: 10, dispersion: 0, sat: 1, smooth: 0, rim: .9, edgeW: 5 });
+    { bevel: 14, thickness: 24, dispersion: 1.2, shade: .45, rim: 1.5, edge: .9,
+      edgeW: 5, sat: 1, smooth: 0 });
 }
 </script>
 </body>
