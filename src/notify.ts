@@ -32,8 +32,19 @@ export async function notifyEvent(
       const last = _lastNotifyAt.get(throttleKey) ?? 0;
       if (now - last < THROTTLE_MS) return;
       _lastNotifyAt.set(throttleKey, now);
-      // 防内存膨胀：超过 500 条时清空重建（低频路径，简单粗暴即可）
-      if (_lastNotifyAt.size > 500) _lastNotifyAt.clear();
+      // 防内存膨胀：超限时淘汰**最旧**的条目。
+      // ── L-11 修复 ── 原实现是整体 `_lastNotifyAt.clear()`，会把**刚刚写入的当前 key**
+      // 一起清掉，于是同一 key 的下一次调用读到 0 直接放行 —— 同一事件在 60 秒内
+      // 可以连发两次，节流形同虚设。改为淘汰最旧的一批并跳过当前 key，
+      // 既控住内存，又不破坏节流语义。
+      if (_lastNotifyAt.size > 500) {
+        const oldest = [..._lastNotifyAt.entries()].sort((x, y) => x[1] - y[1]);
+        for (const [k] of oldest) {
+          if (k === throttleKey) continue;
+          _lastNotifyAt.delete(k);
+          if (_lastNotifyAt.size <= 400) break;
+        }
+      }
     }
 
     const site = s.siteTitle || "cloud-r2pan";

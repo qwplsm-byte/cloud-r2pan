@@ -1,6 +1,7 @@
 import type { Env } from "./types";
 import { createStorageProvider } from "./storage";
 import { getSettings } from "./settings";
+import { purgeExpiredOAuthStates } from "./oauth";
 
 /**
  * 可复用的清理逻辑 —— 供两处调用：
@@ -20,6 +21,16 @@ import { getSettings } from "./settings";
  * 修复：排除非 '/' 路径的文件（WebDAV 托管），并给上传加 7 天宽限期。
  */
 const ORPHAN_UPLOAD_GRACE_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * 单轮最多回收多少个孤儿文件、以及 IN 子句的分批大小。
+ * ── M-8 修复 ──
+ * D1 单查询的绑定参数有上限，原实现把全部 id 一把拼进 `IN (...)`：
+ * 孤儿一多就整批 SQL 报错，**整个清理直接失效**。这里分批 + 每轮封顶，
+ * 超出部分留给下一次 cron，既不会撞参数上限，也不会让一次清理跑太久。
+ */
+const ORPHAN_MAX_PER_RUN = 300;
+const ORPHAN_DELETE_CHUNK = 100;
 
 /** 清理失效分享（过期 / 已撤销 / 达上限）+ 孤儿文件 + 孤儿存储对象 */
 export async function cleanupExpiredShares(
@@ -51,32 +62,59 @@ export async function cleanupExpiredShares(
     .bind(now)
     .run();
 
-  // 2. 删除孤儿 files 的 DB 记录 + 关联 download_logs（候选由第 0 步确定）
+  // 2. 回收孤儿文件 —— **先删存储对象，对象删成功才删 DB 行**
+  //    ── M-9 修复 ── 原实现先删 DB 行、再把对象删除挂到 waitUntil 里静默容错：
+  //    一旦对象删除失败，该 key 已无任何 DB 引用 → 之后再也查不到、永远无法清理，
+  //    成为「永久孤儿对象」持续计费。现在反过来，失败就保留 DB 记录、下轮重试 ——
+  //    最坏只是多留一条记录（可再删），绝不会留下无法追踪的对象。
+  //
+  //    另外按常量分批：D1 单查询的绑定参数有上限，一次几千个 id 拼进 IN 会让**整批**报错，
+  //    反而使清理完全失效（原实现就是一把梭）。
+  let deletedOrphans = 0;
   if (orphanIds.length > 0) {
-    const placeholders = orphanIds.map((_, i) => `?${i + 1}`).join(", ");
-    await env.db.batch([
-      env.db.prepare(`DELETE FROM download_logs WHERE file_id IN (${placeholders})`).bind(...orphanIds),
-      env.db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).bind(...orphanIds),
-    ]);
-  }
+    let st: Awaited<ReturnType<typeof createStorageProvider>> | null = null;
+    try {
+      st = await createStorageProvider(env, await getSettings(env));
+    } catch (e) {
+      // 存储配置不可用 → 整体跳过文件回收，绝不能「删了行却删不掉对象」
+      console.error("cleanup: storage provider unavailable, skip orphan purge:", e);
+    }
 
-  // 4. 异步清理孤儿存储对象（不阻塞响应，批量删除可能慢）
-  if (orphanKeys.length > 0) {
-    ctx.waitUntil(
-      (async () => {
-        const st = await createStorageProvider(env, await getSettings(env));
-        for (const key of orphanKeys) {
-          try {
-            await st.delete(key);
-          } catch {
-            // 删除失败不影响 DB 清理结果，静默跳过
-          }
+    if (st) {
+      const okIds: string[] = [];
+      // 每批并发 10 个对象删除，最多处理 ORPHAN_MAX_PER_RUN 个，剩余留给下一轮
+      for (let i = 0; i < orphanIds.length && okIds.length < ORPHAN_MAX_PER_RUN; i += 10) {
+        const idxs = [];
+        for (let j = i; j < i + 10 && j < orphanIds.length && okIds.length + idxs.length < ORPHAN_MAX_PER_RUN; j++) {
+          idxs.push(j);
         }
-      })()
-    );
+        const results = await Promise.all(
+          idxs.map(async (j) => {
+            try {
+              await st!.delete(orphanKeys[j]);
+              return orphanIds[j];
+            } catch {
+              return null; // 删不掉 → 保留该文件记录，下轮重试
+            }
+          })
+        );
+        for (const id of results) if (id) okIds.push(id);
+      }
+
+      // 对象已删干净，才删 DB 行（按 chunk 分批，避免超出绑定参数上限）
+      for (let i = 0; i < okIds.length; i += ORPHAN_DELETE_CHUNK) {
+        const chunk = okIds.slice(i, i + ORPHAN_DELETE_CHUNK);
+        const placeholders = chunk.map((_, j) => `?${j + 1}`).join(", ");
+        await env.db.batch([
+          env.db.prepare(`DELETE FROM download_logs WHERE file_id IN (${placeholders})`).bind(...chunk),
+          env.db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).bind(...chunk),
+        ]);
+      }
+      deletedOrphans = okIds.length;
+    }
   }
 
-  return { deleted_shares: deleted.meta.changes ?? 0, deleted_orphan_files: orphanIds.length };
+  return { deleted_shares: deleted.meta.changes ?? 0, deleted_orphan_files: deletedOrphans };
 }
 
 /** 清理超期的下载 / 登录日志与过期的 Turnstile 访问计数 */
@@ -113,5 +151,11 @@ export async function runScheduledCleanup(env: Env, ctx: ExecutionContext): Prom
     await pruneOldLogs(env, s.logRetentionDays);
   } catch (e) {
     console.error("cron prune logs failed:", e);
+  }
+  // oauth_states 只插不删会无限膨胀（每次 /oauth/start 都 INSERT 一条，一次性消费只删被用到的）
+  try {
+    await purgeExpiredOAuthStates(env);
+  } catch (e) {
+    console.error("cron purge oauth states failed:", e);
   }
 }

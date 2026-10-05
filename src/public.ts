@@ -331,7 +331,11 @@ export async function handleDownload(
         { zh: check.message || reason || "该激活码不可用", en: check.message || "This activation code is not available" },
         { siteTitle: settings.siteTitle });
     }
-    activateCodeIfNeeded(env, codeRow!).catch(() => {});
+      // ── L-9 修复：游离 Promise 挂到 waitUntil ──
+      // 原来是 `activateCodeIfNeeded(...).catch(()=>{})` 既不 await 也没挂 ctx.waitUntil，
+      // isolate 被回收时可能直接丢弃：时效型激活码停在 unused、expires_at 永远为空（可"永不过期"），
+      // 或到期起点被推迟到下一次使用。挂进 waitUntil 后至少保证本次请求周期内会执行完。
+      ctx.waitUntil(activateCodeIfNeeded(env, codeRow!).catch(() => {}));
   }
 
   if (ban) {
@@ -374,7 +378,19 @@ export async function handleDownload(
     const oauthResult = await verifyOAuthSession(env, req.headers.get("cookie"));
     if (!oauthResult.ok) {
       const providerName = settings.oauthProvider === "custom" ? "OAuth" : settings.oauthProvider;
-      const startUrl = `/oauth/start?provider=${encodeURIComponent(settings.oauthProvider)}&redirect=${encodeURIComponent("/s/" + token)}`;
+      // ── M-3 修复：错误页上的「登录下载」按钮原本必然 400 ──
+      // settings.oauthProvider 存的是 provider **类型**（如 "github"），而 /oauth/start 是按
+      // oauth_providers 表主键（randomId）查询的 → 直接拼类型必得 provider_not_found_or_disabled。
+      // 这里先按类型查出启用中的主键再拼；查不到就退回原值，由 start 端兜底。
+      let providerId = settings.oauthProvider;
+      try {
+        const prow = await env.db
+          .prepare("SELECT id FROM oauth_providers WHERE enabled = 1 AND provider_type = ?1 LIMIT 1")
+          .bind(settings.oauthProvider)
+          .first<{ id: string }>();
+        if (prow?.id) providerId = prow.id;
+      } catch { /* 查不到就用原值 */ }
+      const startUrl = `/oauth/start?provider=${encodeURIComponent(providerId)}&redirect=${encodeURIComponent("/s/" + token)}`;
       return errorPage(req, 401, { zh: "需要登录", en: "OAuth Login Required" },
         { zh: `该资源需要通过 ${providerName} 账号登录后才能下载。`, en: `This resource requires ${providerName} login.` },
         { siteTitle: settings.siteTitle, oauth_login_url: startUrl });
@@ -514,7 +530,11 @@ export async function handleDirectDownload(
         { zh: check.message || check.reason || "该激活码不可用", en: check.message || "This activation code is not available" },
         { siteTitle: settings.siteTitle });
     }
-    activateCodeIfNeeded(env, codeRow!).catch(() => {});
+      // ── L-9 修复：游离 Promise 挂到 waitUntil ──
+      // 原来是 `activateCodeIfNeeded(...).catch(()=>{})` 既不 await 也没挂 ctx.waitUntil，
+      // isolate 被回收时可能直接丢弃：时效型激活码停在 unused、expires_at 永远为空（可"永不过期"），
+      // 或到期起点被推迟到下一次使用。挂进 waitUntil 后至少保证本次请求周期内会执行完。
+      ctx.waitUntil(activateCodeIfNeeded(env, codeRow!).catch(() => {}));
   }
 
   if (ban) {
@@ -652,19 +672,26 @@ async function streamFile(
     const { addSecurityHeaders } = await import("./pages");
     addSecurityHeaders(headers, { isDownload: true });
   }
-  const servedLen = range ? range.length : obj.size;
-  headers.set("content-length", String(servedLen));
+  // ── S4 接线：obj.size === -1 表示存储端未给出大小（WebDAV chunked 响应） ──
+  // 用 DB 里的 row.size 兜底；绝不能把 -1 写进 content-length（非法头 → 下载损坏）。
+  const knownSize = obj.size >= 0 ? obj.size : row.size;
+  const servedLen = range ? range.length : knownSize;
+  if (servedLen >= 0) headers.set("content-length", String(servedLen));
   if (range) {
     headers.set("content-range", `bytes ${range.offset}-${range.offset + servedLen - 1}/${row.size}`);
   }
 
-  // 后台记录
-  const bytes = servedLen;
+  // 后台记录（流量统计绝不能记到 -1）
+  const bytes = servedLen >= 0 ? servedLen : 0;
   const codeId = codeRow ? codeRow.code : null;
   ctx.waitUntil(
     (async () => {
-      // 流量统计始终累计（防止预览绕过流量限额）；
-      // inline 预览不计入下载：不写日志/分析、不扣激活码额度（视频拖动会产生大量 Range 请求，会刷爆日志）
+      // 流量统计始终累计（防止预览绕过流量限额）。
+      // addTraffic 内部会把这次计入 traffic_stats.downloads —— 与 H3 的口径一致：
+      // inline 请求只要「从文件头部投递」（拿到整份文件）就算一次下载，进入趋势图。
+      //
+      // 但 inline 预览**不写** download_logs / 分析数据点 / 不扣激活码额度
+      // （视频拖动会产生大量 Range 请求，会刷爆日志与配额）。
       await addTraffic(env, bytes);
       if (inline) return;
       const { browser, os } = parseUA(ua);

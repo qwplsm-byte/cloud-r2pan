@@ -401,6 +401,12 @@ body {
 .chart .bar:hover { background: linear-gradient(180deg, #67e8f9, #3b82f6); }
 .chart .bar span { position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
   font-size: 11px; color: var(--text-2); opacity: 0; transition: opacity .15s; white-space: nowrap; }
+/* ── 显示 BUG 修复：标签相对柱子水平居中，而首/尾两列紧贴容器边缘，
+      标签会伸出外层 `overflow-x:auto`（溢出即裁剪）被截断 ——
+      末列表现为 "214 MB" 只剩 "214 M"，首列则向左被裁。
+      改为贴边对齐：首列标签向右展开、末列标签向左展开，始终留在容器内。 */
+.chart .col:first-child .bar span { left: 0; right: auto; transform: none; }
+.chart .col:last-child .bar span { left: auto; right: 0; transform: none; }
 .chart .bar:hover span { opacity: 1; }
 .chart .day { font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
@@ -1987,7 +1993,9 @@ async function loadOverview(){
     </div>
     <div class="glass section">
       <div class="section-title"><h2>📊 ${esc(t('chartTitle'))}</h2></div>
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <!-- padding-top:给柱顶悬浮标签留出垂直余量 —— 该容器 overflow-x:auto 会把
+           溢出行轴(overflow-y 计算为 auto)一并裁剪,最高柱的 top:-22px 标签原本会削掉顶部 -->
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-top:10px">
       <div class="chart">
         ${s.chart.map(d => `
         <div class="col">

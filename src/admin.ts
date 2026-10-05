@@ -1,6 +1,6 @@
 import type { Env } from "./types";
 import { ensureSchema, randomId, getSchemaStatus, repairDatabase } from "./db";
-import { generateCodes, makeBatchId, formatCodeStatus, findCodeByString } from "./codes";
+import { generateCodes, makeBatchId, formatCodeStatus } from "./codes";
 import { getSettings, updateSettings } from "./settings";
 import { checkAdminKey, createSession, verifySession, clientIp, rateLimitLogin, requireAdminIp } from "./auth";
 import { pickLang } from "./i18n";
@@ -25,7 +25,11 @@ async function storage(env: Env): Promise<StorageProvider> {
     _storagePromise = (async () => {
       const s = await getSettings(env);
       return createStorageProvider(env, s);
-    })();
+    })().catch((e) => {
+      // 构造失败不能缓存：否则 rejected Promise 会被永久复用，之后所有存储操作全挂
+      _storagePromise = null;
+      throw e;
+    });
   }
   return _storagePromise;
 }
@@ -68,9 +72,10 @@ async function resolveDirectCfg(
   body: { endpoint?: string; access_key_id?: string; secret?: string; bucket?: string }
 ): Promise<DirectUploadConfig | null> {
   const s = await getSettings(env);
-  const endpoint = (body.endpoint ?? s.r2DirectEndpoint ?? env.r2_s3_endpoint ?? "").trim().replace(/\/+$/, "");
-  const accessKeyId = (body.access_key_id ?? s.r2DirectAccessKeyId ?? env.r2_s3_access_key_id ?? "").trim();
-  let secret = body.secret?.trim() || null;
+  // ── L-1 补充：body 字段是运行时值，传数字会因 `.trim` 不是函数而 500 ──
+  const endpoint = String(body.endpoint ?? s.r2DirectEndpoint ?? env.r2_s3_endpoint ?? "").trim().replace(/\/+$/, "");
+  const accessKeyId = String(body.access_key_id ?? s.r2DirectAccessKeyId ?? env.r2_s3_access_key_id ?? "").trim();
+  let secret = String(body.secret ?? "").trim() || null;
   if (!secret && s.r2DirectSecretCipher) secret = await decryptSecret(s.r2DirectSecretCipher, env.admin);
   if (!secret) secret = env.r2_s3_secret_access_key ?? null;
   if (!endpoint || !accessKeyId || !secret) return null;
@@ -110,6 +115,18 @@ function sanitizeName(name: string): string {
     .trim()
     .slice(0, 180);
   return cleaned || "unnamed";
+}
+
+/** LIKE 通配符转义 —— 把 % _ \ 转义，配合 ESCAPE '\' 使用（与公开端一致，防止 % 匹配全部） */
+function likeEscape(p: string): string {
+  return p.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
+/** 判断 D1 写入错误是否为「唯一约束冲突 / 已存在」（并发下先查后插、重复请求都会触发） */
+function isDuplicateErr(e: unknown): boolean {
+  const m = String((e as any)?.message ?? e);
+  const c = String((e as any)?.code ?? "");
+  return /UNIQUE constraint|SQLITE_CONSTRAINT|duplicate/i.test(m) || /CONSTRAINT/i.test(c);
 }
 
 /** 生成带文件名后缀的直链 URL：/d/{token}/{filename}，文件名做 URL 编码 */
@@ -218,7 +235,7 @@ export async function handleAdminApi(
       }
 
       // TOTP 失败 → 尝试恢复码（两种来源：Cloudflare Secret 优先 → D1 恢复码）
-      const normalized = body.code.replace(/\s+/g, "").toUpperCase();
+      const normalized = String(body.code).replace(/\s+/g, "").toUpperCase();
 
       // 1) Cloudflare Secret 恢复码（超级恢复，用一次不消耗）
       const cloudflareRecovery = env.totp_recovery?.trim();
@@ -250,9 +267,10 @@ export async function handleAdminApi(
         if (matched >= 0) {
           // 从列表中移除已使用的恢复码
           hashes.splice(matched, 1);
-          await updateSettings(env, { totp_recovery_hash: hashes.join(",") });
-          // 恢复码通过 → 自动重置 2FA
+          // 恢复码通过 → 自动重置 2FA；三个 key 合并成一次 updateSettings（单个 batch，原子写入），
+          // 避免两次独立写入中途失败留下半状态
           await updateSettings(env, {
+            totp_recovery_hash: hashes.join(","),
             totp_enabled: "0",
             totp_secret_cipher: "",
           });
@@ -444,9 +462,11 @@ export async function handleAdminApi(
     }
   }
   if (path === "/api/admin/webauthn/credentials" && method === "GET") {
+    // 列表查询加 LIMIT，避免大表拖垮 D1/Worker
+    const lim = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 1000));
     const { results } = await env.db.prepare(
-      "SELECT id, device_type, backed_up, name, created_at, last_used_at FROM webauthn_credentials ORDER BY created_at DESC"
-    ).all();
+      "SELECT id, device_type, backed_up, name, created_at, last_used_at FROM webauthn_credentials ORDER BY created_at DESC LIMIT ?"
+    ).bind(lim).all();
     return json({ credentials: results ?? [] });
   }
   const credDelMatch = /^\/api\/admin\/webauthn\/credentials\/([^/]+)$/.exec(path);
@@ -522,12 +542,14 @@ export async function handleAdminApi(
 
   // ── 文件列表 ──────────────────────────────────────
   if (path === "/api/admin/files" && method === "GET") {
+    // 列表查询加 LIMIT（可选 ?limit=），避免每行两个子查询在大表上拖垮 D1/Worker
+    const lim = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 1000));
     const { results } = await env.db.prepare(
       `SELECT f.id, f.name, f.size, f.mime, f.uploaded_at,
               (SELECT COUNT(*) FROM shares s WHERE s.file_id = f.id) AS share_count,
               (SELECT COALESCE(SUM(s.download_count), 0) FROM shares s WHERE s.file_id = f.id) AS download_count
-       FROM files f ORDER BY f.uploaded_at DESC`
-    ).all();
+       FROM files f ORDER BY f.uploaded_at DESC LIMIT ?`
+    ).bind(lim).all();
     return json({ files: results ?? [] });
   }
 
@@ -706,6 +728,10 @@ export async function handleAdminApi(
           .bind(id, key, name, size, mime, Date.now())
           .run();
       } catch (dbErr) {
+        // 重复请求：撞唯一约束说明文件已入库 —— 此时不能删对象（会把第一次成功的对象删掉）
+        if (isDuplicateErr(dbErr)) {
+          return json({ ok: true, id, name, size });
+        }
         ctx.waitUntil(storage(env).then((st) => st.delete(key)).catch(() => {}));
         console.error("direct upload: D1 insert failed, cleaned up storage object:", dbErr);
         return json({ error: msg(req, "数据库写入失败，请重试", "Database write failed. Please retry.") }, 500);
@@ -735,6 +761,10 @@ export async function handleAdminApi(
         .bind(id, key, name, size, mime, Date.now())
         .run();
     } catch (dbErr) {
+      // 重复请求：撞唯一约束说明文件已入库 —— 此时不能删对象（会把第一次成功的对象删掉）
+      if (isDuplicateErr(dbErr)) {
+        return json({ ok: true, id, name, size });
+      }
       ctx.waitUntil(st.delete(key).catch(() => {}));
       console.error("multipart upload: D1 insert failed, cleaned up storage object:", dbErr);
       return json({ error: msg(req, "数据库写入失败，请重试", "Database write failed. Please retry.") }, 500);
@@ -777,6 +807,7 @@ export async function handleAdminApi(
     await env.db.batch([
       env.db.prepare("DELETE FROM shares WHERE file_id = ?1").bind(fileId),
       env.db.prepare("DELETE FROM download_logs WHERE file_id = ?1").bind(fileId),
+      env.db.prepare("DELETE FROM direct_links WHERE file_id = ?1").bind(fileId),
       env.db.prepare("DELETE FROM files WHERE id = ?1").bind(fileId),
     ]);
     const st = await storage(env);
@@ -788,7 +819,7 @@ export async function handleAdminApi(
   if (path === "/api/admin/storage/objects" && method === "GET") {
     const prefix = new URL(req.url).searchParams.get("prefix") ?? "";
     const marker = new URL(req.url).searchParams.get("marker") ?? undefined;
-    const limit = Math.min(500, parseInt(new URL(req.url).searchParams.get("limit") || "100", 10) || 100);
+    const limit = Math.max(1, Math.min(500, parseInt(new URL(req.url).searchParams.get("limit") || "100", 10) || 100));
     try {
       const st = await storage(env);
       const result = await st.list({ prefix, marker, limit });
@@ -804,13 +835,17 @@ export async function handleAdminApi(
     const body = await readJson<{ keys?: string[]; key?: string }>(req).catch(() => ({} as any));
     const rawKeys = body.keys ?? (body.key ? [body.key] : []);
     if (!Array.isArray(rawKeys) || rawKeys.length === 0) return json({ error: msg(req, "缺少 keys", "Missing keys") }, 400);
+    // 上限保护：一次最多删 1000 个 key，防止超大数组拖垮 Worker / 存储后端
+    if (rawKeys.length > 1000) return json({ error: msg(req, "一次最多删除 1000 个 key", "At most 1000 keys per request") }, 400);
     // 安全校验：key 不能为空、不能以 / 开头
     const keys = rawKeys.filter((k: any) => typeof k === "string" && k.length > 0 && !k.startsWith("/"));
     if (keys.length === 0) return json({ error: msg(req, "无有效 key", "No valid keys") }, 400);
     try {
       const st = await storage(env);
-      await Promise.all(keys.map((k) => st.delete(k).catch(() => {})));
-      return json({ ok: true, deleted: keys.length });
+      // 单个失败不中断整体（静默容错），但统计的是实际成功数，不虚报
+      const okFlags = await Promise.all(keys.map((k) => st.delete(k).then(() => true).catch(() => false)));
+      const deleted = okFlags.filter(Boolean).length;
+      return json({ ok: true, deleted, failed: keys.length - deleted });
     } catch (e: any) {
       return json({ ok: false, error: msg(req, `删除失败: ${e?.message ?? e}`, `Delete failed: ${e?.message ?? e}`) }, 500);
     }
@@ -866,25 +901,35 @@ export async function handleAdminApi(
     const marketDesc =
       typeof body.market_desc === "string" && body.market_desc.trim() ? body.market_desc.trim() : null;
     const id = randomId(10);
-    await env.db.prepare(
-      `INSERT INTO shares(id, file_id, created_at, expires_at, max_downloads, password_hash, password_cipher, download_name, is_market, market_title, market_desc, alias)
-       VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
-    )
-      .bind(id, body.file_id, Date.now(), expiresAt, maxDownloads, passwordHash, passwordCipher, downloadName, isMarket, marketTitle, marketDesc, alias)
-      .run();
+    try {
+      await env.db.prepare(
+        `INSERT INTO shares(id, file_id, created_at, expires_at, max_downloads, password_hash, password_cipher, download_name, is_market, market_title, market_desc, alias)
+         VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+      )
+        .bind(id, body.file_id, Date.now(), expiresAt, maxDownloads, passwordHash, passwordCipher, downloadName, isMarket, marketTitle, marketDesc, alias)
+        .run();
+    } catch (e) {
+      // 并发下「先查后插」竞态：撞 idx_shares_alias 唯一索引 → 友好 409，而不是 500 + 堆栈
+      if (alias && isDuplicateErr(e)) {
+        return json({ error: msg(req, "该别名已被占用", "Alias already in use") }, 409);
+      }
+      throw e;
+    }
     return json({ ok: true, id, alias, url: `/s/${alias || id}` }, 201);
   }
 
   // ── 分享列表 ──────────────────────────────────────
   if (path === "/api/admin/shares" && method === "GET") {
+    // 列表查询加 LIMIT（可选 ?limit=），避免大表 + 每行并行解密密码拖垮 D1/Worker
+    const lim = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 1000));
     const { results } = await env.db.prepare(
       `SELECT s.id, s.file_id, s.created_at, s.expires_at, s.max_downloads, s.download_count, s.revoked,
               s.password_hash, s.password_cipher, s.download_name, s.alias,
               s.is_market, s.market_views, s.market_title, s.market_desc,
               f.name AS file_name, f.size AS file_size, f.mime AS file_mime
        FROM shares s JOIN files f ON f.id = s.file_id
-       ORDER BY s.created_at DESC`
-    ).all();
+       ORDER BY s.created_at DESC LIMIT ?`
+    ).bind(lim).all();
     const now = Date.now();
     // 并行解密所有密码明文
     const shares = await Promise.all(
@@ -946,34 +991,36 @@ export async function handleAdminApi(
 
   // ── 管理端市场列表 ──────────────────────────────────
   if (path === "/api/admin/market" && method === "GET") {
-    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+    // page 加上界：page=1e308 会让 (page-1)*perPage = Infinity，bind 抛错 500
+    const page = Math.min(1000000, Math.max(1, Number(url.searchParams.get("page")) || 1));
     const perPage = Math.min(100, Math.max(10, Number(url.searchParams.get("size")) || 20));
     const q = url.searchParams.get("q")?.trim();
     const filterOnly = url.searchParams.get("only") === "market" ? " AND s.is_market = 1" : "";
     const where = q
-      ? ` AND (f.name LIKE ?1 OR COALESCE(s.market_title, '') LIKE ?1 OR COALESCE(s.market_desc, '') LIKE ?1)`
+      ? ` AND (f.name LIKE ?1 ESCAPE '\\' OR COALESCE(s.market_title, '') LIKE ?1 ESCAPE '\\' OR COALESCE(s.market_desc, '') LIKE ?1 ESCAPE '\\')`
       : "";
     const base = `FROM shares s JOIN files f ON f.id = s.file_id WHERE s.revoked = 0${filterOnly}${where}`;
-    const countRow: any = await env.db.prepare(`SELECT COUNT(*) AS c ${base}`).bind(...(q ? [`%${q}%`] : [])).first();
+    const countRow: any = await env.db.prepare(`SELECT COUNT(*) AS c ${base}`).bind(...(q ? [`%${likeEscape(q)}%`] : [])).first();
     const total = countRow?.c ?? 0;
     const { results }: any = await env.db.prepare(
       `SELECT s.id, s.file_id, s.created_at, s.download_count, s.is_market, s.market_views, s.market_title, s.market_desc,
               f.name AS file_name, f.size AS file_size
        ${base} ORDER BY s.created_at DESC LIMIT ?${q ? 2 : 1} OFFSET ?${q ? 3 : 2}`
-    ).bind(...(q ? [`%${q}%`, perPage, (page - 1) * perPage] : [perPage, (page - 1) * perPage])).all();
+    ).bind(...(q ? [`%${likeEscape(q)}%`, perPage, (page - 1) * perPage] : [perPage, (page - 1) * perPage])).all();
     return json({ total, page, size: perPage, rows: results ?? [] });
   }
 
   // ── 下载记录（分页 + 筛选） ────────────────────────
   if (path === "/api/admin/logs" && method === "GET") {
-    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+    // page 加上界，防止 (page-1)*perPage 溢出为 Infinity 导致 bind 抛错 500
+    const page = Math.min(1000000, Math.max(1, Number(url.searchParams.get("page")) || 1));
     const perPage = Math.min(100, Math.max(10, Number(url.searchParams.get("per_page")) || 20));
     const q = url.searchParams.get("q")?.trim();
     const where: string[] = [];
     const binds: (string | number)[] = [];
     if (q) {
-      where.push("(ip LIKE ?1 OR file_name LIKE ?1)");
-      binds.push(`%${q}%`);
+      where.push("(ip LIKE ?1 ESCAPE '\\' OR file_name LIKE ?1 ESCAPE '\\')");
+      binds.push(`%${likeEscape(q)}%`);
     }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     const [total, rows] = await Promise.all([
@@ -1014,23 +1061,26 @@ export async function handleAdminApi(
 
   // ── 封禁列表 ──────────────────────────────────────
   if (path === "/api/admin/bans" && method === "GET") {
+    // 列表查询加 LIMIT，避免大表拖垮 D1/Worker
+    const lim = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 1000));
     const { results } = await env.db.prepare(
-      "SELECT ip, reason, banned_at, expires_at FROM banned_ips ORDER BY banned_at DESC"
-    ).all();
+      "SELECT ip, reason, banned_at, expires_at FROM banned_ips ORDER BY banned_at DESC LIMIT ?"
+    ).bind(lim).all();
     return json({ bans: results ?? [] });
   }
 
   // ── 手动封禁 ──────────────────────────────────────
   if (path === "/api/admin/bans" && method === "POST") {
     const body = await readJson<{ ip: string; reason: string; hours: number | null }>(req);
-    const ip = body.ip?.trim();
+    // 非字符串字段（如 ip 传数字）先转 String 再调字符串方法，避免 TypeError 500
+    const ip = String(body.ip ?? "").trim();
     if (!ip || !/^[0-9a-fA-F:.]{3,45}$/.test(ip)) return json({ error: msg(req, "IP 格式无效", "Invalid IP format") }, 400);
     const expiresAt = body.hours && body.hours > 0 ? Date.now() + body.hours * 3600_000 : null;
     await env.db.prepare(
       `INSERT INTO banned_ips(ip, reason, banned_at, expires_at) VALUES(?1, ?2, ?3, ?4)
        ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason, banned_at = excluded.banned_at, expires_at = excluded.expires_at`
     )
-      .bind(ip, body.reason?.slice(0, 200) || "管理员手动封禁", Date.now(), expiresAt)
+      .bind(ip, String(body.reason ?? "").slice(0, 200) || "管理员手动封禁", Date.now(), expiresAt)
       .run();
     return json({ ok: true }, 201);
   }
@@ -1038,13 +1088,21 @@ export async function handleAdminApi(
   // ── 解封 ──────────────────────────────────────────
   const banMatch = /^\/api\/admin\/bans\/([^/]+)$/.exec(path);
   if (banMatch && method === "DELETE") {
-    await env.db.prepare("DELETE FROM banned_ips WHERE ip = ?1").bind(decodeURIComponent(banMatch[1])).run();
+    // %zz 这类非法转义会让 decodeURIComponent 抛 URIError → 500，失败时退回原值
+    let banIp = banMatch[1];
+    try {
+      banIp = decodeURIComponent(banMatch[1]);
+    } catch {
+      /* 用原值，随后查不到会走正常流程 */
+    }
+    await env.db.prepare("DELETE FROM banned_ips WHERE ip = ?1").bind(banIp).run();
     return json({ ok: true });
   }
 
   // ── 登录安全日志（分页 + 筛选） ────────────────────────
   if (path === "/api/admin/login-logs" && method === "GET") {
-    const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+    // page 加上界，防止 (page-1)*perPage 溢出为 Infinity 导致 bind 抛错 500
+    const page = Math.min(1000000, Math.max(1, Number(url.searchParams.get("page")) || 1));
     const perPage = Math.min(100, Math.max(10, Number(url.searchParams.get("per_page")) || 20));
     const q = url.searchParams.get("q")?.trim();
     const action = url.searchParams.get("action")?.trim();
@@ -1053,8 +1111,8 @@ export async function handleAdminApi(
     const binds: (string | number)[] = [];
     let idx = 1;
     if (q) {
-      where.push(`(ip LIKE ?${idx} OR browser LIKE ?${idx} OR os LIKE ?${idx})`);
-      binds.push(`%${q}%`);
+      where.push(`(ip LIKE ?${idx} ESCAPE '\\' OR browser LIKE ?${idx} ESCAPE '\\' OR os LIKE ?${idx} ESCAPE '\\')`);
+      binds.push(`%${likeEscape(q)}%`);
       idx++;
     }
     if (action) {
@@ -1151,10 +1209,10 @@ export async function handleAdminApi(
     if (!body.admin_key || !checkAdminKey(env, body.admin_key)) {
       return json({ error: msg(req, "管理密钥错误", "Invalid admin key") }, 401);
     }
-    if (!/^[A-Z2-7]{16,}$/.test((body.secret || "").toUpperCase())) {
+    if (!/^[A-Z2-7]{16,}$/.test(String(body.secret ?? "").toUpperCase())) {
       return json({ error: msg(req, "Secret 格式无效", "Invalid secret format") }, 400);
     }
-    const code = (body.code || "").trim();
+    const code = String(body.code ?? "").trim();
     if (!/^\d{6}$/.test(code)) {
       return json({ error: msg(req, "请输入 6 位验证码", "Please enter 6-digit code") }, 400);
     }
@@ -1251,9 +1309,11 @@ export async function handleAdminApi(
   if (path === "/api/admin/direct-links" && method === "GET") {
     const q = new URL(req.url).searchParams.get("q")?.trim();
     const where = q
-      ? ` AND (f.name LIKE ?1 OR COALESCE(dl.notes,'') LIKE ?1)`
+      ? ` AND (f.name LIKE ?1 ESCAPE '\\' OR COALESCE(dl.notes,'') LIKE ?1 ESCAPE '\\')`
       : "";
-    const bindVals = q ? [`%${q}%`] : [];
+    const bindVals = q ? [`%${likeEscape(q)}%`] : [];
+    // 列表查询加 LIMIT（可选 ?limit=），避免大表拖垮 D1/Worker
+    const lim = Math.min(5000, Math.max(1, Number(new URL(req.url).searchParams.get("limit")) || 1000));
     const { results } = await env.db
       .prepare(
         `SELECT dl.id, dl.file_id, dl.created_at, dl.expires_at, dl.max_downloads, dl.download_count, dl.revoked,
@@ -1261,8 +1321,9 @@ export async function handleAdminApi(
                 f.name AS file_name, f.size AS file_size, f.mime AS file_mime
          FROM direct_links dl JOIN files f ON f.id = dl.file_id
          WHERE 1=1 ${where}
-         ORDER BY dl.created_at DESC`
+         ORDER BY dl.created_at DESC LIMIT ?${q ? 2 : 1}`
       )
+      .bind(...bindVals, lim)
       .all();
     const now = Date.now();
     const list = (results ?? []).map((dl: any) => ({
@@ -1652,7 +1713,16 @@ export async function handleAdminApi(
 
   // ── 清空 Turnstile 访问计数 ────────────────────────
   if (path === "/api/admin/turnstile/visits" && method === "DELETE") {
-    const days = Number(new URL(req.url).searchParams.get("days"));
+    const daysParam = new URL(req.url).searchParams.get("days");
+    // 不带 days = 前端「重置访问计数」按钮的既有语义（全表清空）；
+    // 带了 days 但非法（abc / 0 / 负数 / 溢出）一律 400，绝不能把非法参数静默变成全表清空
+    let days = 0;
+    if (daysParam !== null) {
+      days = Number(daysParam);
+      if (!Number.isFinite(days) || days <= 0 || !Number.isFinite(days * 86400_000)) {
+        return json({ error: msg(req, "days 参数必须为正数", "days must be a positive number") }, 400);
+      }
+    }
     const before = days > 0 ? new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10) : null;
     const r = before
       ? await env.db.prepare("DELETE FROM turnstile_visits WHERE day < ?1").bind(before).run()
@@ -1849,17 +1919,21 @@ export async function handleAdminApi(
   // DELETE /api/admin/oauth/providers/:id
   if (m && !m[3] && method === "DELETE") {
     const id = m[1];
-    await env.db.prepare("DELETE FROM oauth_providers WHERE id = ?1").bind(id).run();
+    const r = await env.db.prepare("DELETE FROM oauth_providers WHERE id = ?1").bind(id).run();
+    // id 不存在时 0 行受影响 —— 与 PUT 分支一致返回 404，而不是假 ok
+    if ((r.meta.changes ?? 0) === 0) return json({ error: "not_found" }, 404);
     return json({ ok: true });
   }
 
   // POST /api/admin/oauth/providers/:id/toggle —— 切换启用/禁用
   if (m && m[3] === "toggle" && method === "POST") {
     const id = m[1];
-    await env.db
+    const r = await env.db
       .prepare("UPDATE oauth_providers SET enabled = 1 - enabled, updated_at = ?1 WHERE id = ?2")
       .bind(Date.now(), id)
       .run();
+    // id 不存在时 0 行受影响 —— 返回 404 而不是假 ok
+    if ((r.meta.changes ?? 0) === 0) return json({ error: "not_found" }, 404);
     return json({ ok: true });
   }
 
@@ -1881,12 +1955,14 @@ export async function handleAdminApi(
     }>(req);
     const count = Math.max(1, Math.min(10000, Number(body.count) || 100));
     const traffic = Math.max(0, Number(body.traffic_bytes) || 0);
-    const days = Math.max(0, Number(body.days_valid) || 0);
+    // 有效天数：非法值归 0，并加上限，避免 days*86400000 = Infinity 写 D1 失败
+    const days = Math.min(36500, Math.max(0, Number(body.days_valid) || 0));
     if (traffic === 0 && days === 0) {
       return json({ error: msg(req, "至少设置流量额度或有效天数之一", "Set at least traffic OR days_valid") }, 400);
     }
 
-    const batchIdRaw = (body.batch_id ?? "").trim();
+    // 非字符串 batch_id（如传数字）先转 String 再 trim，避免 TypeError 500
+    const batchIdRaw = String(body.batch_id ?? "").trim();
     const batchId = batchIdRaw ? batchIdRaw : makeBatchId();
     const now = Date.now();
     const ids = generateCodes(count);
@@ -1923,7 +1999,8 @@ export async function handleAdminApi(
     const plan = sp.get("plan");
     const q = sp.get("q");
     const exportCsv = sp.get("export") === "1";
-    const page = Math.max(1, Number(sp.get("page")) || 1);
+    // page 加上界，防止 (page-1)*pageSize 溢出为 Infinity 导致 bind 抛错 500
+    const page = Math.min(1000000, Math.max(1, Number(sp.get("page")) || 1));
     const pageSize = Math.min(500, Math.max(10, Number(sp.get("size")) || 50));
     const offset = (page - 1) * pageSize;
 
@@ -1938,7 +2015,7 @@ export async function handleAdminApi(
     if (status) { where.push(`(${effectiveStatusExpr}) = ?`); binds.push(now, status); }
     if (batchId) { where.push("batch_id = ?"); binds.push(batchId); }
     if (plan) { where.push("plan_id = ?"); binds.push(plan); }
-    if (q) { where.push("(code LIKE ? OR notes LIKE ?)"); binds.push(`%${q}%`, `%${q}%`); }
+    if (q) { where.push("(code LIKE ? ESCAPE '\\' OR notes LIKE ? ESCAPE '\\')"); binds.push(`%${likeEscape(q)}%`, `%${likeEscape(q)}%`); }
 
     const whereSql = where.length ? "WHERE " + where.join(" AND ") : "";
     const countSql = `SELECT COUNT(*) AS c FROM activation_codes ${whereSql}`;
@@ -1979,15 +2056,22 @@ export async function handleAdminApi(
       const csvRows = [
         "code,plan_id,batch_id,traffic_bytes,used_bytes,days_valid,status,quota_message,notes,created_at,activated_at,expires_at",
       ];
-      const allResults = (await env.db.prepare(`SELECT * FROM activation_codes ${whereSql} ORDER BY created_at DESC`).bind(...binds).all()).results as any[];
+      // 导出上限 5000 行，避免全表导出拖垮 D1/Worker（可用 ?limit= 调小）
+      const exportLim = Math.min(5000, Math.max(1, Number(sp.get("limit")) || 5000));
+      const allResults = (await env.db.prepare(`SELECT * FROM activation_codes ${whereSql} ORDER BY created_at DESC LIMIT ?`).bind(...binds, exportLim).all()).results as any[];
       for (const r of allResults) {
         const esc = (v: any) => {
           if (v == null) return "";
           const s = String(v).replace(/"/g, '""');
           return /[",\n]/.test(s) ? `"${s}"` : s;
         };
+        // CSV 公式注入中和：= + - @ 开头的用户可控字段前加 '，防止被 Excel 当公式执行
+        const neutralize = (v: any) => {
+          const s = v == null ? "" : String(v);
+          return /^[=+\-@]/.test(s) ? `'${s}` : s;
+        };
         csvRows.push(
-          [r.code, r.plan_id ?? "", r.batch_id ?? "", r.traffic_bytes, r.used_bytes, r.days_valid, r.status, esc(r.quota_message), esc(r.notes), r.created_at ?? "", r.activated_at ?? "", r.expires_at ?? ""].join(",")
+          [r.code, neutralize(r.plan_id), neutralize(r.batch_id), r.traffic_bytes, r.used_bytes, r.days_valid, r.status, esc(neutralize(r.quota_message)), esc(neutralize(r.notes)), r.created_at ?? "", r.activated_at ?? "", r.expires_at ?? ""].join(",")
         );
       }
       const body = csvRows.join("\n");
@@ -2175,11 +2259,13 @@ export async function handleAdminApi(
           truncated: listed.truncated,
         });
       } catch (err: any) {
+        // 堆栈只记服务端日志，生产响应不回传 stack
+        console.error("[storage/test webdav]", err?.stack || err);
         return json({
           ok: false,
           error: "webdav_test_failed",
           message: String(err?.message ?? err),
-          detail: err?.stack ?? "",
+          detail: String(err?.message ?? err),
         }, 502);
       }
     }
@@ -2202,7 +2288,7 @@ export async function handleAdminApi(
         endpoint: body.endpoint ?? s.s3Endpoint!,
         region: body.region ?? s.s3Region ?? "us-east-1",
         bucket: body.bucket ?? s.s3Bucket!,
-        accessKeyId: (body.access_key_id ?? s.s3AccessKeyId!).trim(),
+        accessKeyId: String(body.access_key_id ?? s.s3AccessKeyId!).trim(),
         secretAccessKey: secret,
         addressingStyle: (body.addressing_style ?? s.s3AddressingStyle ?? "path") as "path" | "virtual",
       };
@@ -2227,11 +2313,13 @@ export async function handleAdminApi(
           head_size: head?.size ?? 0,
         });
       } catch (err: any) {
+        // 堆栈只记服务端日志，生产响应不回传 stack
+        console.error("[storage/test s3]", err?.stack || err);
         return json({
           ok: false,
           error: "s3_test_failed",
           message: String(err?.message ?? err),
-          detail: err?.stack ?? "",
+          detail: String(err?.message ?? err),
         }, 502);
       }
     } else {
@@ -2325,11 +2413,12 @@ export async function handleAdminApi(
 
   return json({ error: "not_found" }, 404);
   } catch (e: any) {
+    // 堆栈只记服务端日志，生产响应绝不回传 stack / SQL 片段
     console.error("[handleAdminApi]", e?.stack || e);
     return json({
       error: "server_error",
-      message: String(e?.message ?? e),
-      stack: (e?.stack || "").split("\n").slice(0, 8).join("\n"),
+      code: "server_error",
+      message: msg(req, "服务器内部错误，请稍后重试", "Internal server error. Please retry later."),
     }, 500);
   }
 }

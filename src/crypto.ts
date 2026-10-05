@@ -7,11 +7,27 @@
  * 极易在维护时漏改或误用。此处统一实现，按用途命名。
  */
 
-/** 恒定时间字符串比较，防时序攻击 */
+/**
+ * 恒定时间字符串比较，防时序攻击。
+ *
+ * ── L-8 修复：去掉长度早退泄漏 ──
+ * 原实现首行 `if (a.length !== b.length) return false` 会因长度不同而立即返回，
+ * 攻击者可按响应耗时推出被比较值的长度。
+ * 现改为始终遍历两者**较长**的长度（较短一侧缺失位补 0），最后把长度差并入 diff：
+ * 长度不等时 `|=` 一个非零值必然得到非零，故判定结果与原实现**完全一致**，无误判风险。
+ *
+ * 说明：遍历长度仍是 max(len)，因此「总耗时」仍暴露 max 长度 —— 本项目比较的都是
+ * 定长值（HMAC 签名 / 6 位 TOTP / SHA-256 hash），该残余影响可忽略，且不再有提前分支。
+ */
 export function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+  const len = a.length > b.length ? a.length : b.length;
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < len; i++) {
+    const ca = i < a.length ? a.charCodeAt(i) : 0;
+    const cb = i < b.length ? b.charCodeAt(i) : 0;
+    diff |= ca ^ cb;
+  }
+  diff |= a.length - b.length; // 长度不等 → 或入非零 → 必然返回 false
   return diff === 0;
 }
 

@@ -13,7 +13,8 @@
 
 import type { Env } from "./types";
 import { getSettings } from "./settings";
-import { decryptSecret } from "./crypto";
+import { decryptSecret, safeEqual } from "./crypto";
+import { clientIp } from "./auth";
 import {
   getBuiltinProvider,
   BUILTIN_PROVIDERS,
@@ -25,6 +26,8 @@ import {
   signOAuthSession,
   verifyOAuthSession,
   deriveRedirectUri,
+  generateCodeVerifier,
+  sha256Base64Url,
   type OAuthProvider,
 } from "./oauth";
 
@@ -103,11 +106,47 @@ export async function handleOAuthProviders(req: Request, env: Env): Promise<Resp
   return Response.json({ providers, enabled: providers.length > 0 });
 }
 
+/* ═══════════ /oauth/start 限流（isolate 内存，写法沿用 auth.ts 的 rateLimitLogin）═══════════
+ * ── M-5B 修复：原实现每请求一次 INSERT，无限流可被刷爆 oauth_states 表。
+ * 同一 IP 1 分钟窗口内最多 10 次，超出返回 429。
+ * ⚠️ Worker 无状态，计数随 isolate 重启清空（与项目其他限流一致，只加重刷成本）。
+ */
+const OAUTH_START_LIMIT = 10;
+const OAUTH_START_WINDOW_MS = 60_000;
+const oauthStartAttempts = new Map<string, { count: number; resetAt: number }>();
+let oauthStartSweepCount = 0;
+
+function rateLimitOAuthStart(ip: string): boolean {
+  const now = Date.now();
+  const rec = oauthStartAttempts.get(ip);
+  if (!rec || rec.resetAt < now) {
+    if (rec) oauthStartAttempts.delete(ip);
+    oauthStartAttempts.set(ip, { count: 1, resetAt: now + OAUTH_START_WINDOW_MS });
+  } else {
+    rec.count++;
+  }
+  // 每 100 次调用触发一次全量 sweep，防止过期 entry 累积占内存
+  if (++oauthStartSweepCount % 100 === 0) {
+    for (const [key, val] of oauthStartAttempts) {
+      if (val.resetAt < now) oauthStartAttempts.delete(key);
+    }
+  }
+  return oauthStartAttempts.get(ip)!.count <= OAUTH_START_LIMIT;
+}
+
 /* ═══════════ GET /oauth/start?provider=<provider_id>&redirect=<path> ═══════════ */
 export async function handleOAuthStart(req: Request, env: Env): Promise<Response> {
   const url = new URL(req.url);
   const providerDbId = url.searchParams.get("provider") || "";
   const redirectTo = url.searchParams.get("redirect") || "/";
+
+  // ── M-5B：/oauth/start 限流，防每请求一次 INSERT 撑爆 oauth_states ──
+  if (!rateLimitOAuthStart(clientIp(req))) {
+    return Response.json(
+      { error: "rate_limited", message: "请求过于频繁，请稍后再试" },
+      { status: 429, headers: { "Retry-After": String(OAUTH_START_WINDOW_MS / 1000) } }
+    );
+  }
 
   const settings = await getSettings(env);
   if (!settings.oauthEnabled) {
@@ -130,23 +169,34 @@ export async function handleOAuthStart(req: Request, env: Env): Promise<Response
   const redirectUri = deriveRedirectUri(req);
   // state 里存 D1 provider 的 db id，callback 时直接查回完整 provider
   const state = await createOAuthState(env, row.id, redirectUri);
+
+  // ── M-2 修复：PKCE + state 绑定浏览器（防登录 CSRF）──
+  // code_verifier 只进 HttpOnly cookie，不进 URL；authorize 只带 S256 挑战值。
+  // state 同名一次性 cookie 下发给发起登录的浏览器，callback 时比对，防止攻击者
+  // 拿自己流程里的 code+state 塞进受害者浏览器完成「登录 CSRF」。
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await sha256Base64Url(codeVerifier);
   const authorizeUrl = buildAuthorizeUrl(
     provider,
     row.client_id,
     redirectUri,
     row.scope || provider.default_scope,
-    state
+    state,
+    codeChallenge
   );
 
-  // 把 redirectTo 写进 Cookie
-  const cookie = `cd_oauth_redirect=${encodeURIComponent(redirectTo)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`;
-  return new Response(null, {
-    status: 302,
-    headers: {
-      location: authorizeUrl,
-      "set-cookie": cookie,
-    },
-  });
+  // ── L-4：cd_oauth_redirect 补 Secure（HTTPS 下）──
+  const secureAttr = url.protocol === "https:" ? "; Secure" : "";
+  // ── M-4 同理：多个 Set-Cookie 必须各自成头，不能逗号拼接（RFC 6265）──
+  const h = new Headers();
+  h.set("location", authorizeUrl);
+  h.append(
+    "set-cookie",
+    `cd_oauth_redirect=${encodeURIComponent(redirectTo)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secureAttr}`
+  );
+  h.append("set-cookie", `cd_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secureAttr}`);
+  h.append("set-cookie", `cd_oauth_pkce=${codeVerifier}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${secureAttr}`);
+  return new Response(null, { status: 302, headers: h });
 }
 
 /* ═══════════ GET /oauth/callback ═══════════ */
@@ -162,7 +212,20 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
     return redirectBackWithMsg(req, "oauth_missing_code");
   }
 
-  // 1. 校验 state（一次性消费 + TTL）
+  const cookieHeader = req.headers.get("cookie");
+  // ── M-2 修复：state 必须与发起登录的那个浏览器绑定（一次性 HttpOnly cookie）──
+  // 放在消费 state 之前校验：比对失败时不消耗合法 state，避免被刷掉。
+  const boundState = parseCookie(cookieHeader, "cd_oauth_state");
+  if (!boundState || !safeEqual(boundState, state)) {
+    return redirectBackWithMsg(req, "oauth_state_unbound");
+  }
+  // ── M-2：PKCE code_verifier 只存在于发起登录的浏览器，缺失即拒绝 ──
+  const codeVerifier = parseCookie(cookieHeader, "cd_oauth_pkce");
+  if (!codeVerifier) {
+    return redirectBackWithMsg(req, "oauth_pkce_missing");
+  }
+
+  // 1. 校验 state（一次性消费 + TTL，单条 DELETE ... RETURNING 原子完成）
   const verify = await verifyOAuthState(env, state);
   if (!verify.ok || !verify.provider_id) {
     return redirectBackWithMsg(req, "oauth_state_invalid");
@@ -186,6 +249,11 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
   if (!row) {
     return redirectBackWithMsg(req, "oauth_provider_missing");
   }
+  // ── M-3 相关：/oauth/start 已查 enabled，callback 必须复查 ──
+  // 否则「start 之后被管理员禁用」或 state 伪造成功时，已禁用 provider 仍能完成登录。
+  if (!row.enabled) {
+    return redirectBackWithMsg(req, "oauth_provider_disabled");
+  }
   const provider = rowToProvider(row);
   if (!provider) {
     return redirectBackWithMsg(req, "oauth_provider_broken");
@@ -202,7 +270,7 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
 
   // 3. code → access_token
   const redirectUri = verify.redirect_uri!;
-  const token = await exchangeCode(provider, code, redirectUri, row.client_id, clientSecret);
+  const token = await exchangeCode(provider, code, redirectUri, row.client_id, clientSecret, codeVerifier);
   if (!token) {
     return redirectBackWithMsg(req, "oauth_exchange_failed");
   }
@@ -228,15 +296,18 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
   const setCookieParts: string[] = [cookie, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=3600"];
   if (url.protocol === "https:" && secure) setCookieParts.push("Secure");
   const setCookie = setCookieParts.join("; ");
-  const clearRedirect = "cd_oauth_redirect=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
 
-  return new Response(null, {
-    status: 302,
-    headers: {
-      location: originalRedirect,
-      "set-cookie": [setCookie, clearRedirect].join(", "),
-    },
-  });
+  // ── M-4 修复：原来用 `["a","b"].join(", ")` 拼成一个 set-cookie 头，违反 RFC 6265 ──
+  // 部分解析器会把它当成一个 Cookie，导致 cd_oauth_redirect 清不掉 / 丢 Secure。
+  // 改为多次 append，让每个 Set-Cookie 独立成头（CF Workers 的 Headers 支持多次 append）。
+  const h = new Headers();
+  h.set("location", originalRedirect);
+  h.append("set-cookie", setCookie);
+  h.append("set-cookie", "cd_oauth_redirect=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  h.append("set-cookie", "cd_oauth_state=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+  h.append("set-cookie", "cd_oauth_pkce=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+
+  return new Response(null, { status: 302, headers: h });
 }
 
 /* ═══════════ GET /oauth/session ═══════════ */
@@ -258,6 +329,14 @@ export async function handleOAuthSession(req: Request, env: Env): Promise<Respon
 
 /* ═══════════ POST /oauth/logout ═══════════ */
 export async function handleOAuthLogout(req: Request): Promise<Response> {
+  // ── L-6 修复：仅接受 POST，防「<img src=/oauth/logout>」式的 CSRF 强制登出 ──
+  // 前端 share.html 用 fetch POST 调用；index.ts 仍会把 GET 转进来，这里兜底拒绝。
+  if (req.method !== "POST") {
+    return Response.json(
+      { ok: false, error: "method_not_allowed" },
+      { status: 405, headers: { allow: "POST" } }
+    );
+  }
   const url = new URL(req.url);
   const secure = url.protocol === "https:";
   const cookie = `cd_oauth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? "; Secure" : ""}`;
@@ -291,18 +370,31 @@ function parseCookie(header: string | null, name: string): string {
   if (!header) return "";
   const re = new RegExp(`(?:^|;\\s*)${name}=([^;]*)`);
   const m = re.exec(header);
-  return m ? decodeURIComponent(m[1]) : "";
+  if (!m) return "";
+  // ── L-5 修复：非法 % 序列会让 decodeURIComponent 抛异常 → 500，失败回退原值 ──
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
 }
 
 function redirectBackWithMsg(req: Request, msg: string): Response {
   const redirectTo = parseCookie(req.headers.get("cookie"), "cd_oauth_redirect") || "/";
-  const url = new URL(redirectTo, "https://localhost");
-  url.searchParams.set("oauth_error", msg);
+  // ── L-5 修复：new URL 可能抛异常（500），失败统一回退到 / ──
+  let target = `/?oauth_error=${encodeURIComponent(msg)}`;
+  try {
+    const url = new URL(redirectTo, "https://localhost");
+    url.searchParams.set("oauth_error", msg);
+    target = `${url.pathname}${url.search}`;
+  } catch {
+    // 保留 encodeURIComponent 版本的兜底地址
+  }
   const setCookie = "cd_oauth_redirect=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
   return new Response(null, {
     status: 302,
     headers: {
-      location: `${url.pathname}${url.search}`,
+      location: target,
       "set-cookie": setCookie,
     },
   });

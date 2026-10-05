@@ -67,6 +67,8 @@ const SCHEMA_STATEMENTS: string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_logs_share_ip ON download_logs(share_id, ip, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_logs_created ON download_logs(created_at)`,
+  // 清理孤儿文件时要按 file_id 删日志，没有这个索引会全表扫描
+  `CREATE INDEX IF NOT EXISTS idx_logs_file ON download_logs(file_id)`,
   `CREATE TABLE IF NOT EXISTS login_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action TEXT NOT NULL,
@@ -225,6 +227,8 @@ const MIGRATION_STATEMENTS: string[] = [
   // ═══════════ 分享自定义别名 ═══════════
   "ALTER TABLE shares ADD COLUMN alias TEXT",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_shares_alias ON shares(alias)",
+  // ═══════════ 清理孤儿文件时按 file_id 删日志（否则全表扫描） ═══════════
+  "CREATE INDEX IF NOT EXISTS idx_logs_file ON download_logs(file_id)",
 ];
 
 /**
@@ -246,21 +250,38 @@ async function runMigrations(env: Env): Promise<void> {
   if (version >= MIGRATION_STATEMENTS.length - 1) return; // 最新
 
   // 只跑 version+1 之后的迁移
+  // ── L-13 修复：原实现对每条迁移都 catch 掉错误后继续，最后**无条件**把
+  //    migration_version 写成 length —— 于是「语句其实失败了」也会被标记为已完成，
+  //    之后再也不会重试，`/api/admin/db/repair` 也发现不了这种「版本已记但列没加上」。
+  //    现在区分两类失败：
+  //      · 幂等性失败（列/索引/表已存在）→ 视为成功，继续下一条
+  //      · 真失败（语法错、磁盘、权限…）→ **立即停止且不推进版本**，
+  //        这样下次 ensureSchema 会重试，getSchemaStatus 也能报出 unhealthy
+  let lastDone = version; // 已成功执行到的最高下标
   for (let i = version + 1; i < MIGRATION_STATEMENTS.length; i++) {
     try {
       await env.db.prepare(MIGRATION_STATEMENTS[i]).run();
-    } catch {
-      /* 列/索引已存在，忽略（保持幂等兜底） */
+      lastDone = i;
+    } catch (e) {
+      const msg = String((e as any)?.message ?? e);
+      if (/duplicate column|already exists/i.test(msg)) {
+        lastDone = i; // 对象已存在 = 这条迁移的效果已达成
+      } else {
+        console.error(`migration[${i}] failed, will retry next run:`, msg);
+        break; // 真失败：停在这里，不把它标记成已完成
+      }
     }
   }
 
-  // 写入新版本（存数量，不是下标）
-  try {
-    await env.db.prepare(
-      "INSERT INTO settings(key, value) VALUES('migration_version', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-    ).bind(String(MIGRATION_STATEMENTS.length)).run();
-  } catch {
-    /* settings 表不存在时忽略 */
+  // 写入新版本（存数量，不是下标）；只有真正推进了才写，避免把失败写成成功
+  if (lastDone > version) {
+    try {
+      await env.db.prepare(
+        "INSERT INTO settings(key, value) VALUES('migration_version', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      ).bind(String(lastDone + 1)).run();
+    } catch {
+      /* settings 表不存在时忽略 */
+    }
   }
 }
 
@@ -347,6 +368,7 @@ const EXPECTED_INDEXES: string[] = [
   "idx_shares_market",
   "idx_files_path",
   "idx_shares_alias",
+  "idx_logs_file",
 ];
 
 export interface SchemaStatus {

@@ -267,6 +267,16 @@ function bufToHex(buf: ArrayBuffer): string {
 }
 
 /**
+ * 对**原始字节**做 SHA-256（二进制 body 专用）。
+ * 不能复用 sha256Hex(data: string)：TextDecoder 解码非 UTF-8 字节会产生 U+FFFD 替换字符，
+ * 算出的 hash 与真实负载不符 → S3 校验 x-amz-content-sha256 时报 SignatureDoesNotMatch。
+ */
+async function sha256HexOfBytes(buf: Uint8Array | ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return bufToHex(digest);
+}
+
+/**
  * 极简 XML 解析器 —— 专用于 S3 ListObjectsV2 返回
  * 不做通用解析，只提取 ListBucketResult 下的 Contents + CommonPrefixes + IsTruncated + NextContinuationToken
  */
@@ -332,7 +342,6 @@ async function signS3Request(
   bodyHash: string,
   now: Date
 ): Promise<{ url: string; headers: Record<string, string> }> {
-  const host = new URL(cfg.endpoint).hostname;
   // SigV4 的 credential scope 日期必须是紧凑的 YYYYMMDD（不能带短横线），
   // 否则 R2/S3 会报 "Credential signed date ... does not match x-amz-date"。
   const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -357,6 +366,13 @@ async function signS3Request(
   }
 
   // 添加签名头
+  // 签名用的 Host 必须与**实际发出去的 URL** 的 host 一致：
+  // virtual-host 寻址下真实请求的是 https://<bucket>.endpoint/...，Host 是 bucket.endpoint，
+  // 若仍签 endpoint 的 hostname，服务端按真实 Host 重算签名必然对不上 → 403 SignatureDoesNotMatch。
+  // path-style 下 new URL(url).host 与 endpoint 的 host 相同，行为不变。
+  // 用 .host 而非 .hostname：端口非默认时（如 http://minio:9000）Host 头必须含端口，
+  // 否则服务端按 `host:port` 重算签名同样对不上；默认端口时 URL API 会自动省略，等价于 .hostname。
+  const host = new URL(url).host;
   headers["Host"] = host;
   headers["x-amz-date"] = amzDate;
   headers["x-amz-content-sha256"] = bodyHash;
@@ -409,9 +425,12 @@ export function createS3Provider(cfg: S3Config): StorageProvider {
         bodyHash = "UNSIGNED-PAYLOAD";
         fetchBody = opts.body;
       } else if (opts.body instanceof Uint8Array || opts.body instanceof ArrayBuffer) {
-        const buf = opts.body instanceof ArrayBuffer ? opts.body : (opts.body.buffer as ArrayBuffer);
-        bodyHash = await sha256Hex(new TextDecoder().decode(buf));
-        fetchBody = buf;
+        // 二进制 body 必须按**字节**算 hash：先 TextDecoder 解码成字符串再 hash 会把
+        // 非 UTF-8 字节变成 U+FFFD，hash 与真实负载不符 → SignatureDoesNotMatch。
+        bodyHash = await sha256HexOfBytes(opts.body);
+        // 直接发原始字节，保证「参与签名的 bodyHash」与「实际发出的 body」完全一致
+        //（原来取 opts.body.buffer：Uint8Array 若只是底层 buffer 的一个视图，会把多余字节也发出去）
+        fetchBody = opts.body;
       }
     }
 
@@ -464,7 +483,12 @@ export function createS3Provider(cfg: S3Config): StorageProvider {
         headers["Range"] = rangeHeader;
       }
       const resp = await doFetch("GET", key, { headers });
-      if (resp.status === 404 || resp.status === 403) return null;
+      if (resp.status === 404) return null;
+      if (resp.status === 403) {
+        // 403 不是「对象不存在」：多为密钥错误 / 桶名错误 / 权限不足 / Bucket Policy 拒绝。
+        // 这里必须抛错（上层映射为 502），若按 404 返回 null，会把配置错误伪装成「文件不存在」。
+        throw new Error("S3 403 Forbidden: 检查 Access Key / 桶权限 / Bucket Policy");
+      }
       if (!resp.ok) {
         const text = await resp.text().catch(() => resp.statusText);
         throw new Error(`S3 GET failed: ${resp.status} ${text}`);
@@ -490,7 +514,11 @@ export function createS3Provider(cfg: S3Config): StorageProvider {
 
     async head(key) {
       const resp = await doFetch("HEAD", key, {});
-      if (resp.status === 404 || resp.status === 403) return null;
+      if (resp.status === 404) return null;
+      if (resp.status === 403) {
+        // 同 get()：403 是权限/配置错误，不能当成「对象不存在」返回 null
+        throw new Error("S3 403 Forbidden: 检查 Access Key / 桶权限 / Bucket Policy");
+      }
       if (!resp.ok) return null;
       const size = parseInt(resp.headers.get("Content-Length") || "0", 10) || 0;
       return {
@@ -725,10 +753,23 @@ export function createWebDAVProvider(cfg: WebDAVConfig): StorageProvider {
       if (resp.status === 404 || resp.status === 403) return null;
       if (!resp.ok) throw new Error(`WebDAV GET failed: ${resp.status}`);
 
-      const sizeStr = resp.headers.get("Content-Length") || "0";
+      // 大小优先取 Content-Length；远端若用 chunked transfer（无 Content-Length），
+      // 回退到 X-File-Size，再回退到 Content-Range 的总量部分（bytes 0-99/12345 取 / 后）。
+      // 都拿不到时返回 **-1 表示「大小未知」**：调用方（public.ts）须用 DB 里的 row.size 兜底，
+      // 千万不要把 -1 直接写进 content-length（会得到非法头 / 下载损坏）。
+      let size = parseInt(resp.headers.get("Content-Length") || "", 10);
+      if (!(size >= 0)) {
+        const xfs = resp.headers.get("X-File-Size");
+        if (xfs) size = parseInt(xfs, 10);
+      }
+      if (!(size >= 0)) {
+        const crTotal = resp.headers.get("Content-Range")?.split("/")[1];
+        if (crTotal) size = parseInt(crTotal, 10);
+      }
+      if (!(size >= 0)) size = -1;
       return {
         body: resp.body!,
-        size: parseInt(sizeStr, 10) || 0,
+        size,
         contentType: resp.headers.get("Content-Type") || "application/octet-stream",
         etag: resp.headers.get("ETag") || "",
       };

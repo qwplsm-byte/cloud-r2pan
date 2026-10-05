@@ -54,11 +54,15 @@ function checkRateLimit(ip: string): { ok: boolean; retryAfterSec?: number } {
     entry.bannedUntil = now + RATE_LIMIT_BAN_MS;
     return { ok: false, retryAfterSec: Math.ceil(RATE_LIMIT_BAN_MS / 1000) };
   }
-  // 顺便清理老条目（简单版：超过 1 分钟没访问就清掉）
+  // 顺便清理老条目
+  // ── M-7 修复：原条件要求 `v.bannedUntil === 0`，导致**所有被封禁过的 IP 条目永不回收**
+  //    （封禁到期后依然留在 map 里）。攻击者每换一个 IP 触发一次封禁，map 就永久 +1，
+  //    isolate 内存无界增长。现在改为：只要「不在封禁期内」且「窗口已过期」就回收；
+  //    仍在封禁期内的必须保留，否则封禁会当场失效。
   for (const [k, v] of rateLimitMap) {
-    if (now - v.windowStart > RATE_LIMIT_WINDOW_MS * 3 && v.bannedUntil === 0) {
-      rateLimitMap.delete(k);
-    }
+    const banActive = v.bannedUntil > now;
+    const stale = now - v.windowStart > RATE_LIMIT_WINDOW_MS * 3;
+    if (!banActive && stale) rateLimitMap.delete(k);
   }
   return { ok: true };
 }
@@ -157,8 +161,18 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === "/oauth/session" && req.method === "GET") {
     return handleOAuthSession(req, env);
   }
-  if (path === "/oauth/logout" && (req.method === "POST" || req.method === "GET")) {
+  // ── L-6 修复：登出只允许 POST ──
+  // 原来 `POST || GET` 都放行，第三方站点可以用 <img src="/oauth/logout"> 之类的方式
+  // 触发 CSRF 强制登出。前端 public/share.html 用的是 fetch POST，收紧到 POST 不影响
+  // 正常登出（handler 内部另有一道 405 兜底，这里让 GET 连 handler 都不进）。
+  if (path === "/oauth/logout" && req.method === "POST") {
     return handleOAuthLogout(req);
+  }
+  if (path === "/oauth/logout") {
+    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+      status: 405,
+      headers: { "content-type": "application/json;charset=utf-8", allow: "POST" },
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -167,7 +181,18 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   // ══════════════════════════════════════════════════════════════
   if (path === "/api/codes/status" && req.method === "GET") {
     await ensureSchema(env);
-    // ① IP 限流 —— 公开端点，防枚举爆破
+    const code = (new URL(req.url).searchParams.get("code") || "").trim().toUpperCase();
+    if (!code) {
+      return Response.json({ ok: false, error: "missing_code" }, { status: 400 });
+    }
+    // ① 格式校验 —— 纯垃圾字符直接 400，**不消耗限流配额也不查 DB**
+    //    ── M-7 修复：原来这段排在 checkRateLimit 之后，注释说「不消耗配额」但实现是
+    //    先 count++ 再校验，两者矛盾。把零成本的格式校验提到限流之前：
+    //    垃圾输入不占配额（也完全不碰 DB），而真正按格式爆破的仍然会被限流。
+    if (!isCodeLenientFormat(code)) {
+      return Response.json({ ok: false, error: "bad_format", message: "激活码格式不正确" }, { status: 400 });
+    }
+    // ② IP 限流 —— 公开端点，防枚举爆破
     const ip = clientIp(req);
     const limit = checkRateLimit(ip);
     if (!limit.ok) {
@@ -176,14 +201,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
         { status: 429, headers: { "Retry-After": String(limit.retryAfterSec ?? 60) } }
       );
     }
-    const code = (new URL(req.url).searchParams.get("code") || "").trim().toUpperCase();
-    if (!code) {
-      return Response.json({ ok: false, error: "missing_code" }, { status: 400 });
-    }
-    // ② 格式校验 —— 纯垃圾字符直接 400，不消耗限流配额也不查 DB
-    if (!isCodeLenientFormat(code)) {
-      return Response.json({ ok: false, error: "bad_format", message: "激活码格式不正确" }, { status: 400 });
-    }
+    // ③ 查 DB
     const row = await findCodeByString(env, code);
     if (!row) {
       return Response.json({ ok: false, error: "not_found", message: "码不存在" }, { status: 404 });
