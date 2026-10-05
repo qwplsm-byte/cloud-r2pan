@@ -25,6 +25,11 @@ export async function createSession(env: Env, secure = false): Promise<string> {
 
 /** 校验会话 Cookie，返回是否有效 */
 export async function verifySession(req: Request, env: Env): Promise<boolean> {
+  // ── C3 修复：admin 密钥未配置时直接拒绝（fail-closed） ──
+  // TextEncoder().encode(undefined) 走默认参数返回空字节，等于用「空字符串」当 HMAC 密钥，
+  // 攻击者可本地自行签发 cd_admin cookie 通过校验，接管全部 /api/admin/*。
+  // checkAdminKey(:41) 与登录分支早已有同样守卫，这里补齐对称检查。
+  if (!env.admin) return false;
   const token = getCookie(req, COOKIE_NAME);
   if (!token) return false;
   const dot = token.indexOf(".");

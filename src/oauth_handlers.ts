@@ -216,7 +216,14 @@ export async function handleOAuthCallback(req: Request, env: Env): Promise<Respo
   // 5. 发 OAuth 会话 Cookie
   // cookie 里存的是 db id，方便 later check 时知道用的是哪个 provider
   const { cookie, secure } = await signOAuthSession(env, providerDbId, user.id);
-  const originalRedirect = parseCookie(req.headers.get("cookie"), "cd_oauth_redirect") || "/";
+  // ── H10 修复：回跳目标白名单（防开放重定向 / 钓鱼） ──
+  // cd_oauth_redirect cookie 在 /oauth/start 时由攻击者可控的 ?redirect= 写入，
+  // 原实现把它的值原样塞进 location 做 302，可构造
+  //   /oauth/start?provider=<id>&redirect=https%3A%2F%2Fevil.com
+  // 或 redirect=//evil.com，完成登录后把用户送到钓鱼站。
+  // 错误分支本来就有 new URL() 取 pathname 的防护，成功路径却没有。
+  // 这里只放行「同源站内路径」：必须以单个 / 开头（排除 //、/\）。
+  const originalRedirect = safeLocalRedirect(parseCookie(req.headers.get("cookie"), "cd_oauth_redirect"));
 
   const setCookieParts: string[] = [cookie, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=3600"];
   if (url.protocol === "https:" && secure) setCookieParts.push("Secure");
@@ -264,6 +271,21 @@ export async function handleOAuthLogout(req: Request): Promise<Response> {
 }
 
 /* ═══════════ 辅助函数 ═══════════ */
+
+/**
+ * ── H10 修复 ──
+ * 把回跳目标限制为同源站内路径，防止开放重定向钓鱼。
+ *   "https://evil.com/..." → "/"   （绝对 URL，拒绝）
+ *   "//evil.com"          → "/"   （协议相对，浏览器会当外站，拒绝）
+ *   "/\\evil.com"         → "/"   （部分浏览器把 \/ 当 // 解析，拒绝）
+ *   "/s/abc?x=1"          → 原样返回（站内路径，放行）
+ */
+function safeLocalRedirect(raw: string): string {
+  const v = (raw || "").trim();
+  if (!v.startsWith("/")) return "/";
+  if (v.startsWith("//") || v.startsWith("/\\")) return "/";
+  return v;
+}
 
 function parseCookie(header: string | null, name: string): string {
   if (!header) return "";

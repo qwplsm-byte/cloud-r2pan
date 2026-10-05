@@ -169,22 +169,42 @@ export async function deductQuota(
   if (fresh.status === "revoked") return { ok: false, remaining: 0, exhausted: true, reason: "revoked", message: "该激活码已被作废" };
   if (fresh.expires_at && fresh.expires_at < now) return { ok: false, remaining: 0, exhausted: true, reason: "expired", message: "该激活码已过期" };
 
-  // 流量无限 → 直接加 used_bytes 都行，不做耗尽判断
+  // 流量无限 → 只做累加，不做耗尽判断
   const unlimited = fresh.traffic_bytes === 0;
-  const newUsed = fresh.used_bytes + bytes;
 
   let sql: string;
   let bind: any[];
+  /** 本次实际扣掉的字节数（受限额度下按剩余量封顶），用于计算返回值 */
+  let applied: number;
 
   if (unlimited) {
-    sql = "UPDATE activation_codes SET used_bytes = ?1 WHERE id = ?2";
-    bind = [newUsed, fresh.id];
+    // ── H5 修复：改为 SQL 内增量累加 ──
+    // 原实现回写的是「JS 里用 stale 读出的旧值算的绝对值」，并发请求读到同一旧值会互相覆盖 → 漏扣。
+    sql = "UPDATE activation_codes SET used_bytes = used_bytes + ?1 WHERE id = ?2 AND status != 'revoked'";
+    bind = [bytes, fresh.id];
+    applied = bytes;
   } else {
-    // 原子 check-and-update：只有 used + bytes <= total 才更新，防止并发超扣
-    // 额度耗尽时自动把 status 切为 'exhausted'，让后台统计/过滤能正确识别
+    // ── H4 + H5 修复 ──
+    //
+    // (H4) 原实现要求「整笔塞得下」(used + bytes <= total) 才扣费，而准入 checkCodeUsable
+    //      只要求 used < total。剩余额度不足时扣费永远 changed=0，下载端只 console.warn，
+    //      used_bytes 纹丝不动 → 码永远不会 exhausted → 大于剩余额度的文件可无限免费下载。
+    //      改为按剩余额度封顶扣 MIN(bytes, remaining)，扣到上限即置 exhausted，下次准入即被拦。
+    //
+    // (H5) 扣减改为 SQL 内增量 `used_bytes + MIN(...)`，不再回写 stale 绝对值。
+    //
+    // 注：SQLite 对同一 UPDATE 的所有 SET 表达式一律按「旧值」求值（已实测 a=a+5, b=a → b=旧a），
+    //     故 status 判断里的 used_bytes 仍是旧值，不会被本次 used_bytes 赋值污染。
     sql =
-      "UPDATE activation_codes SET used_bytes = ?1, status = CASE WHEN ?1 >= traffic_bytes THEN 'exhausted' ELSE status END WHERE id = ?2 AND used_bytes + ?3 <= traffic_bytes AND status != 'revoked'";
-    bind = [newUsed, fresh.id, bytes];
+      `UPDATE activation_codes
+         SET used_bytes = used_bytes + MIN(?1, MAX(0, traffic_bytes - used_bytes)),
+             status = CASE
+               WHEN used_bytes + MIN(?1, MAX(0, traffic_bytes - used_bytes)) >= traffic_bytes
+                 THEN 'exhausted' ELSE status END
+       WHERE id = ?2 AND status != 'revoked' AND used_bytes < traffic_bytes`;
+    const remainingNow = Math.max(0, fresh.traffic_bytes - fresh.used_bytes);
+    applied = Math.max(0, Math.min(bytes, remainingNow));
+    bind = [bytes, fresh.id];
   }
 
   const result = await env.db.prepare(sql).bind(...bind).run();
@@ -206,8 +226,9 @@ export async function deductQuota(
     return { ok: false, remaining: Math.max(0, again.traffic_bytes - again.used_bytes), exhausted: true, reason: "unknown", message: "扣减失败" };
   }
 
-  const remaining = unlimited ? -1 : Math.max(0, fresh.traffic_bytes - newUsed);
-  const exhausted = !unlimited && newUsed >= fresh.traffic_bytes;
+  const usedAfter = fresh.used_bytes + applied;
+  const remaining = unlimited ? -1 : Math.max(0, fresh.traffic_bytes - usedAfter);
+  const exhausted = !unlimited && usedAfter >= fresh.traffic_bytes;
   return { ok: true, remaining, exhausted };
 }
 

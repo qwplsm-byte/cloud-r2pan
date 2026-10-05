@@ -896,8 +896,11 @@ async function triggerDownload(d, ts, tsEnabled, tsOnDownload){
   const baseUrl = `/s/${token}/download`;
   // 读取已绑定的激活码（从 localStorage）
   const code = getBoundCode();
+  // 后端修复后 on_share 模式也会在超阈值时校验 cf，因此这里同样要在
+  // 「打开页面时已经弹过验证码」的情况下把 token 带上（否则会重定向回页面死循环）。
+  const tsOnShareNeed = !!(ts.enabled && ts.sitekey && ts.mode === 'on_share' && ts.needs_now);
   // both / on_download 模式：先确保有 token
-  if(tsEnabled && tsOnDownload){
+  if(tsEnabled && (tsOnDownload || tsOnShareNeed)){
     let tk = window.__tsToken;
     if(!tk){
       // 还没渲染过 → 现在渲染
@@ -915,7 +918,9 @@ async function triggerDownload(d, ts, tsEnabled, tsOnDownload){
     location.href = url;
   } else {
     let url = baseUrl;
-    if(code) url += `?code=${encodeURIComponent(code)}`;
+    // 已有 token 就顺手带上（后端在未超阈值时会忽略它）
+    if(window.__tsToken) url += `?cf=${window.__tsToken}`;
+    if(code) url += (url.includes('?') ? '&' : '?') + `code=${encodeURIComponent(code)}`;
     location.href = url;
   }
 }
@@ -952,9 +957,10 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAut
       let res = {};
       try{ res = await r.json(); }catch{}
       if(r.ok && res.url){
-        // on_download 模式需要 cf 参数
+        // on_download / 超阈值的 on_share 模式需要 cf 参数（后端 on_share 修复后同样校验）
         let dlUrl;
-        if(tsEnabled && tsOnDownload && !res.url.includes('cf=')){
+        const tsOnShareNeed2 = !!(ts.enabled && ts.sitekey && ts.mode === 'on_share' && ts.needs_now);
+        if(tsEnabled && (tsOnDownload || tsOnShareNeed2) && !res.url.includes('cf=')){
           let tk = window.__tsToken;
           if(!tk){
             const box = document.createElement('div');
@@ -968,6 +974,9 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAut
           dlUrl = res.url + sep + 'cf=' + tk;
         } else {
           dlUrl = res.url;
+          if(window.__tsToken && !dlUrl.includes('cf=')){
+            dlUrl += (dlUrl.includes('?') ? '&' : '?') + 'cf=' + window.__tsToken;
+          }
         }
         if(code){ const s2 = dlUrl.includes('?') ? '&' : '?'; dlUrl += s2 + 'code=' + encodeURIComponent(code); }
         if(previewType){

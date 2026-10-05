@@ -352,18 +352,19 @@ export async function handleDownload(
   if (row.max_downloads && row.download_count >= row.max_downloads) return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
     { zh: `该资源允许下载 ${row.max_downloads} 次，名额已用完。`, en: `Download limit (${row.max_downloads}) reached.` });
 
-  // inline 预览模式：完整走安全校验链，但不消耗下载次数
+  // inline 预览模式：完整走安全校验链
   const inline = new URL(req.url).searchParams.get("inline") === "1";
 
-  if (row.max_downloads && !inline) {
-    const r = await env.db.prepare(
-      `UPDATE shares SET download_count = download_count + 1 WHERE id = ?1 AND download_count < ?2`
-    ).bind(token, row.max_downloads).run();
-    if ((r.meta.changes ?? 0) === 0)
-      return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
-        { zh: `名额已用完。`, en: `Quota used up.` });
-  }
+  // ── H3 修复：判断本次响应是否「从文件头部开始投递」 ──
+  // 无 Range，或 Range 起点为 0，都算整份投递 → 必须计数。
+  // 这样既堵住 `?inline=1` 从任意偏移拼接整份文件的无限白嫖，
+  // 又不会让视频拖动（起点 > 0 的局部 Range 读取）刷爆下载次数。
+  const inlineRange = parseRange(req.headers.get("range"), row.size);
+  const startsAtHead = !inlineRange || inlineRange.offset === 0;
 
+  // ── C4 修复：密码 / OAuth / Turnstile / 限额 必须全部排在扣减之前 ──
+  // 原实现第 358 行先原子扣减 download_count，之后才验密码（原 367 行），
+  // 导致未持密码的匿名请求反复 GET /download 即可把分享名额耗尽（DoS）。
   if (row.password_hash && !(await verifyShareToken(env, token, new URL(req.url).search))) {
     return errorPage(req, 403, { zh: "需要访问密码", en: "Password Required" },
       { zh: "该分享受密码保护。", en: "This share is password-protected." });
@@ -397,6 +398,24 @@ export async function handleDownload(
           { zh: "人机验证未通过。", en: "Human verification failed." },
           { siteTitle: settings.siteTitle });
       }
+    } else if (mode === "on_share") {
+      // ── H2 修复：on_share 模式补上后端校验 ──
+      // 原实现里 verifyTurnstileToken 只在 handleVerify（要求 mode=both）
+      // 与上面的 downloadGate（on_download / both）被调用，on_share 模式下
+      // 后端从未验证过任何 token —— 前端弹了验证码也只是 UI 摆设，
+      // 直接 GET /s/:token/download 即可完全绕过。
+      // 现复用与 /info 完全一致的「每 IP 每日计数 + 阈值」判定（同为 count > threshold）。
+      const visitCount = await trackAndGetVisits(env, ip);
+      if (visitCount > settings.turnstileThreshold) {
+        const turnstileToken = url.searchParams.get("cf");
+        const pass = turnstileToken ? await verifyTurnstileToken(env, settings, turnstileToken, ip) : false;
+        if (!pass) {
+          // 这里刻意返回 302 而非 403：重定向回分享页后，/info 会重新计数并按需渲染
+          // 验证码组件，用户解决后即可继续。避免「要求验证码却无处可输」的死路
+          // （例如阈值刚被跨过、页面尚未渲染 widget 的边界情况）。
+          return Response.redirect(new URL(`/s/${token}`, url).toString(), 302);
+        }
+      }
     }
   }
 
@@ -417,7 +436,10 @@ export async function handleDownload(
       const since = settings.countWindowHours > 0 ? Date.now() - settings.countWindowHours * 3600_000 : 0;
       const { c } = (await env.db.prepare(
         "SELECT COUNT(*) AS c FROM download_logs WHERE share_id = ?1 AND ip = ?2 AND created_at > ?3"
-      ).bind(token, ip, since).first<{ c: number }>()) ?? { c: 0 };
+        // ── H1 修复：用解析后的 row.id 而不是 URL 里的 token ──
+        // token 可能是自定义 alias，与 download_logs 里按 id 记录的行对不上，
+        // 导致同一分享经 alias 访问时重复下载检测失效、统计被拆成两份。
+      ).bind(row.id, ip, since).first<{ c: number }>()) ?? { c: 0 };
       if (c >= settings.maxDownloadsPerIp) {
         if (settings.autoBan) {
           const expiresAt = settings.banHours > 0 ? Date.now() + settings.banHours * 3600_000 : null;
@@ -432,6 +454,26 @@ export async function handleDownload(
           { siteTitle: settings.siteTitle });
       }
     }
+  }
+
+  // ── C4 修复：所有校验通过之后才扣减下载次数 ──
+  // 必须排在密码 / OAuth / Turnstile / 流量限额 / 重复下载 检查之后，
+  // 否则任何一次校验失败都会白扣名额，匿名请求反复 GET 即可耗尽配额（DoS）。
+  //
+  // ── H1 修复：用 row.id 而不是 URL 里的 token ──
+  // token 可能是自定义 alias，`WHERE id = alias` 永远匹配不到行 → changes=0
+  // → 代码误判为「名额已用完」返回 410。凡设置了 alias 且限次的分享 100% 下载失败。
+  //
+  // ── H3 修复：inline 预览不再无条件免计数 ──
+  // 只要本次响应从文件头部开始投递（即拿到整份文件），同样计数；
+  // 起点 > 0 的局部 Range（视频拖动）仍不计数，避免刷爆次数。
+  if (row.max_downloads && (!inline || startsAtHead)) {
+    const r = await env.db.prepare(
+      `UPDATE shares SET download_count = download_count + 1 WHERE id = ?1 AND download_count < ?2`
+    ).bind(row.id, row.max_downloads).run();
+    if ((r.meta.changes ?? 0) === 0)
+      return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
+        { zh: `名额已用完。`, en: `Quota used up.` });
   }
 
   return streamFile(req, env, ctx, row, token, "share", inline);
@@ -493,14 +535,8 @@ export async function handleDirectDownload(
   if (row.max_downloads && row.download_count >= row.max_downloads) return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
     { zh: `名额已用完。`, en: `Quota used up.` });
 
-  if (row.max_downloads) {
-    const r = await env.db.prepare(
-      `UPDATE direct_links SET download_count = download_count + 1 WHERE id = ?1 AND download_count < ?2`
-    ).bind(token, row.max_downloads).run();
-    if ((r.meta.changes ?? 0) === 0)
-      return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
-        { zh: `名额已用完。`, en: `Quota used up.` });
-  }
+  // ── C4 修复：直链的扣减已后移到所有校验之后（见下方 streamFile 之前）──
+  // 原来这里在「流量限额」「重复下载」检查之前就扣次数，校验失败会白扣名额。
 
   {
     const whitelisted = isAdminWhitelisted(ip, settings.adminIps);
@@ -519,7 +555,7 @@ export async function handleDirectDownload(
       const since = settings.countWindowHours > 0 ? Date.now() - settings.countWindowHours * 3600_000 : 0;
       const { c } = (await env.db.prepare(
         "SELECT COUNT(*) AS c FROM download_logs WHERE share_id = ?1 AND ip = ?2 AND created_at > ?3"
-      ).bind(token, ip, since).first<{ c: number }>()) ?? { c: 0 };
+      ).bind(row.id, ip, since).first<{ c: number }>()) ?? { c: 0 };
       if (c >= settings.maxDownloadsPerIp) {
         if (settings.autoBan) {
           const expiresAt = settings.banHours > 0 ? Date.now() + settings.banHours * 3600_000 : null;
@@ -535,6 +571,17 @@ export async function handleDirectDownload(
     }
   }
 
+  // ── C4 修复：所有校验（过期/撤销/次数/限额/重复下载）通过后才扣减 ──
+  // ── H1 修复：直链没有 alias，row.id === token，但统一用主键更稳妥 ──
+  if (row.max_downloads) {
+    const r = await env.db.prepare(
+      `UPDATE direct_links SET download_count = download_count + 1 WHERE id = ?1 AND download_count < ?2`
+    ).bind(row.id, row.max_downloads).run();
+    if ((r.meta.changes ?? 0) === 0)
+      return errorPage(req, 410, { zh: "下载次数已达上限", en: "Download Limit Reached" },
+        { zh: `名额已用完。`, en: `Quota used up.` });
+  }
+
   return streamFile(req, env, ctx, row, token, "direct");
 }
 
@@ -544,6 +591,8 @@ export async function handleDirectDownload(
  * ════════════════════════════════════════════════════════════════════ */
 
 interface StreamFileRow {
+  /** 分享 / 直链的数据库主键（URL token 可能是 alias，主键不会变） */
+  id: string;
   file_id: string;
   key: string;
   name: string;
@@ -640,8 +689,11 @@ async function streamFile(
         `INSERT INTO download_logs(share_id, file_id, file_name, ip, ua, browser, os, country, bytes, created_at, activation_code)
          VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
       )
-        // 直链也记 download_logs —— share_id 字段存 direct link token 方便追踪
-        .bind(token, row.file_id, row.name, ip, ua.slice(0, 500), browser, os, country, bytes, Date.now(), codeId)
+        // ── H1 修复：share_id 统一存数据库主键 row.id ──
+        // 原来存 URL 里的 token：分享走 alias 时存的是别名，与上面
+        // 「按 row.id 查重复下载」的统计口径对不上，同一次下载会被算成两份。
+        // 直链没有 alias，row.id === token，行为不变。
+        .bind(row.id, row.file_id, row.name, ip, ua.slice(0, 500), browser, os, country, bytes, Date.now(), codeId)
         .run();
       // 下载事件通知（60s 节流）
       const { notifyEvent } = await import("./notify");

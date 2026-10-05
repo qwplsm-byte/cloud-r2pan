@@ -8,12 +8,42 @@ import { getSettings } from "./settings";
  * 2. Cron Trigger 每日自动清理（index.ts 的 scheduled handler）
  */
 
+/**
+ * 孤儿文件判定的「上传宽限期」。
+ *
+ * ── C2 修复（不可恢复的数据丢失）────────────────────────────────
+ * 原查询只判「没有任何 share / direct_link 引用」，既不过滤也不等待，每日 cron
+ * 会把下列本应保留的文件连同 R2 对象一起永久删除：
+ *   ① 通过 WebDAV 挂载写入的文件 —— 它们只 INSERT files、永远不会创建 share
+ *   ② 刚上传、还没来得及调创建分享接口的文件 —— 上传与建分享是两个独立接口，
+ *      两者之间存在时间窗口，cron 落在窗口内即销毁
+ * 修复：排除非 '/' 路径的文件（WebDAV 托管），并给上传加 7 天宽限期。
+ */
+const ORPHAN_UPLOAD_GRACE_MS = 7 * 24 * 3600 * 1000;
+
 /** 清理失效分享（过期 / 已撤销 / 达上限）+ 孤儿文件 + 孤儿存储对象 */
 export async function cleanupExpiredShares(
   env: Env,
   ctx: ExecutionContext
 ): Promise<{ deleted_shares: number; deleted_orphan_files: number }> {
   const now = Date.now();
+
+  // 0. 【必须排在删除分享之前】先取孤儿快照 —— C2 修复 ——
+  //    原实现先删失效分享、再在同一轮里查孤儿，于是分享一过期，它的唯一文件立刻
+  //    被判为孤儿并连同存储对象销毁（把「分享过期」升级成「源文件永久删除」）。
+  //    先取快照再删分享后，这批文件至少能保留一个清理周期，给管理员补救窗口。
+  const orphans = await env.db.prepare(
+    `SELECT f.id, f.key FROM files f
+     LEFT JOIN shares s ON s.file_id = f.id
+     LEFT JOIN direct_links d ON d.file_id = f.id
+     WHERE s.id IS NULL AND d.id IS NULL
+       AND (f.path IS NULL OR f.path = '/')
+       AND f.uploaded_at < ?1`
+  ).bind(now - ORPHAN_UPLOAD_GRACE_MS).all<{ id: string; key: string }>();
+
+  const orphanIds = (orphans.results ?? []).map((o) => o.id);
+  const orphanKeys = (orphans.results ?? []).map((o) => o.key);
+
   // 1. 删除失效 shares
   const deleted = await env.db.prepare(
     "DELETE FROM shares WHERE revoked = 1 OR (expires_at IS NOT NULL AND expires_at < ?1) OR (max_downloads IS NOT NULL AND download_count >= max_downloads)"
@@ -21,18 +51,7 @@ export async function cleanupExpiredShares(
     .bind(now)
     .run();
 
-  // 2. 查出孤儿 files：没有任何 share 或直链引用的文件（LEFT JOIN 反查）
-  const orphans = await env.db.prepare(
-    `SELECT f.id, f.key FROM files f
-     LEFT JOIN shares s ON s.file_id = f.id
-     LEFT JOIN direct_links d ON d.file_id = f.id
-     WHERE s.id IS NULL AND d.id IS NULL`
-  ).all<{ id: string; key: string }>();
-
-  const orphanIds = (orphans.results ?? []).map((o) => o.id);
-  const orphanKeys = (orphans.results ?? []).map((o) => o.key);
-
-  // 3. 删除孤儿 files 的 DB 记录 + 关联 download_logs
+  // 2. 删除孤儿 files 的 DB 记录 + 关联 download_logs（候选由第 0 步确定）
   if (orphanIds.length > 0) {
     const placeholders = orphanIds.map((_, i) => `?${i + 1}`).join(", ");
     await env.db.batch([

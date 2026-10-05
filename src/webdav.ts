@@ -62,6 +62,11 @@ function buildHref(baseUrl: string, internalPath: string): string {
   return `${u.origin}/webdav${clean}/`;
 }
 
+/** LIKE 通配符转义 —— 把 % _ \ 转义,配合 ESCAPE '\' 使用 */
+function likeEscape(p: string): string {
+  return p.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 /** RFC 1123 日期格式 */
 function rfc1123(date: Date): string {
   return date.toUTCString().replace(/GMT$/, "GMT");
@@ -143,8 +148,8 @@ async function directoryExists(env: Env, path: string): Promise<boolean> {
   if (child) return true;
   // 有文件以这个目录开头（更深层）—— 也算存在
   const deeper: any = await env.db
-    .prepare("SELECT 1 FROM files WHERE path LIKE ?1 LIMIT 1")
-    .bind(path + "/%")
+    .prepare("SELECT 1 FROM files WHERE path LIKE ?1 ESCAPE '\\' LIMIT 1")
+    .bind(likeEscape(path) + "/%")
     .first();
   return !!deeper;
 }
@@ -156,8 +161,8 @@ async function listDirChildren(env: Env, path: string): Promise<{ files: DBFile[
 
   // 1. 直接子文件：path = 父路径 + "/" + name（精确）
   const { results: files } = await env.db
-    .prepare("SELECT id, key, name, size, mime, path, uploaded_at FROM files WHERE path LIKE ?1")
-    .bind(path === "" ? "/%" : path + "/%")
+    .prepare("SELECT id, key, name, size, mime, path, uploaded_at FROM files WHERE path LIKE ?1 ESCAPE '\\'")
+    .bind(path === "" ? "/%" : likeEscape(path) + "/%")
     .all<DBFile>();
 
   // 过滤出直接子文件（不是子目录里的）
@@ -177,7 +182,7 @@ async function listDirChildren(env: Env, path: string): Promise<{ files: DBFile[
       }
     } else {
       // 子目录下：path="/dir"，f.path="/dir/sub" 或 "/dir/file.txt"
-      const rest = relPath.slice(nextSlash.length - 1); // 去掉 "/dir" 前缀
+      const rest = relPath.slice(nextSlash.length); // 去掉 "/dir/" 前缀
       if (!rest) continue;
       const slashIdx = rest.indexOf("/");
       if (slashIdx < 0) {
@@ -193,8 +198,8 @@ async function listDirChildren(env: Env, path: string): Promise<{ files: DBFile[
   // 2. directories 表里显式创建的子目录
   const dirPrefix = path === "" ? "/" : nextSlash;
   const { results: explicitDirs } = await env.db
-    .prepare("SELECT path FROM directories WHERE path LIKE ?1 AND path != ?2")
-    .bind(dirPrefix + "%", path === "" ? "/" : path)
+    .prepare("SELECT path FROM directories WHERE path LIKE ?1 ESCAPE '\\' AND path != ?2")
+    .bind(likeEscape(dirPrefix) + "%", path === "" ? "/" : path)
     .all<{ path: string }>();
 
   for (const d of explicitDirs) {
@@ -203,7 +208,7 @@ async function listDirChildren(env: Env, path: string): Promise<{ files: DBFile[
       const parts = d.path.split("/").filter(Boolean);
       if (parts.length >= 1) subDirSet.add("/" + parts[0]);
     } else {
-      const rest = d.path.slice(nextSlash.length - 1);
+      const rest = d.path.slice(nextSlash.length);
       if (!rest) continue;
       const slashIdx = rest.indexOf("/");
       if (slashIdx < 0) {
@@ -354,10 +359,28 @@ export async function handleWebDAV(
 
   // 3. 检查根路径限制（settings.webdav_root_path）
   const settings = await getSettings(env);
-  if (settings.webdavRootPath && settings.webdavRootPath !== "/") {
-    const root = settings.webdavRootPath.replace(/\/+$/, "") || "/";
-    if (!internalPath.startsWith(root)) {
-      return new Response("Forbidden", { status: 403 });
+  const root = settings.webdavRootPath && settings.webdavRootPath !== "/"
+    ? settings.webdavRootPath.replace(/\/+$/, "")
+    : "";
+  if (root && !(internalPath === root || internalPath.startsWith(root + "/"))) {
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  // 3.1 MOVE/COPY —— Destination 必须同源且位于 /webdav 下，目标路径同样受 root 限制
+  if (method === "MOVE" || method === "COPY") {
+    const destHeader = req.headers.get("destination");
+    if (destHeader) {
+      try {
+        const destUrl = new URL(destHeader);
+        if (destUrl.origin !== url.origin ||
+            !(destUrl.pathname === "/webdav" || destUrl.pathname.startsWith("/webdav/"))) {
+          return new Response("Invalid Destination", { status: 502 });
+        }
+        const destPath = extractInternalPath(destUrl.pathname);
+        if (root && !(destPath === root || destPath.startsWith(root + "/"))) {
+          return new Response("Forbidden", { status: 403 });
+        }
+      } catch { /* 无法解析的 Destination 交由各方法返回 400 */ }
     }
   }
 
@@ -507,6 +530,12 @@ async function handleWebDavGet(
   headers.set("Accept-Ranges", "bytes");
   headers.set("Last-Modified", tsToRfc1123(file.uploaded_at));
   headers.set("Cache-Control", "no-store");
+  // 防同源内联渲染 XSS —— 危险类型强制附件下载，所有响应加 nosniff
+  headers.set("X-Content-Type-Options", "nosniff");
+  const baseType = (obj.contentType || "").split(";")[0].trim().toLowerCase();
+  if (["text/html", "image/svg+xml", "application/xhtml+xml", "text/xml", "application/xml"].includes(baseType)) {
+    headers.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
+  }
 
   if (headOnly) {
     return new Response("", { status: 200, headers });
@@ -588,19 +617,8 @@ async function handleWebDavPut(
 
   // 检查是否已存在同名文件（覆盖）
   const existing = await findFile(env, dir, name);
-  if (existing) {
-    // 删除旧文件 + 关联的 shares
-    try {
-      await env.db.batch([
-        env.db.prepare("DELETE FROM shares WHERE file_id = ?1").bind(existing.id),
-        env.db.prepare("DELETE FROM download_logs WHERE file_id = ?1").bind(existing.id),
-        env.db.prepare("DELETE FROM files WHERE id = ?1").bind(existing.id),
-      ]);
-      await st.delete(existing.key).catch(() => {});
-    } catch { /* 忽略清理失败 */ }
-  }
 
-  // 插入新文件记录
+  // 先插入新记录，成功后再清理旧记录，避免覆盖失败时原文件永久丢失
   const fullPath = dir === "/" ? `/${name}` : `${dir}/${name}`;
   try {
     await env.db.prepare(
@@ -610,6 +628,18 @@ async function handleWebDavPut(
     // D1 失败 —— 清理 storage
     await st.delete(key).catch(() => {});
     return new Response(`DB error: ${err?.message || err}`, { status: 502 });
+  }
+
+  if (existing) {
+    // 删除旧文件 + 关联的 shares（新旧对象 key 相同时跳过，避免误删刚写入的新对象）
+    try {
+      await env.db.batch([
+        env.db.prepare("DELETE FROM shares WHERE file_id = ?1").bind(existing.id),
+        env.db.prepare("DELETE FROM download_logs WHERE file_id = ?1").bind(existing.id),
+        env.db.prepare("DELETE FROM files WHERE id = ?1").bind(existing.id),
+      ]);
+      if (existing.key !== key) await st.delete(existing.key).catch(() => {});
+    } catch { /* 忽略清理失败 */ }
   }
 
   return new Response("", {
@@ -648,9 +678,9 @@ async function handleWebDavDelete(env: Env, internalPath: string): Promise<Respo
   if (await directoryExists(env, internalPath)) {
     // 递归删除目录下所有文件
     const st = await storage(env);
-    const likePattern = internalPath + "/%";
+    const likePattern = likeEscape(internalPath) + "/%";
     const { results: files } = await env.db
-      .prepare("SELECT id, key FROM files WHERE path LIKE ?1")
+      .prepare("SELECT id, key FROM files WHERE path LIKE ?1 ESCAPE '\\'")
       .bind(likePattern)
       .all<{ id: string; key: string }>();
 
@@ -859,9 +889,9 @@ async function moveFile(env: Env, srcPath: string, destPath: string): Promise<vo
 /* ═══════════ 辅助：移动目录（递归更新 path 前缀） ═══════════ */
 
 async function moveDirectory(env: Env, srcDir: string, destDir: string): Promise<void> {
-  const likePattern = srcDir === "/" ? "/%" : srcDir + "/%";
+  const likePattern = srcDir === "/" ? "/%" : likeEscape(srcDir) + "/%";
   const { results: files } = await env.db
-    .prepare("SELECT id, path FROM files WHERE path LIKE ?1")
+    .prepare("SELECT id, path FROM files WHERE path LIKE ?1 ESCAPE '\\'")
     .bind(likePattern)
     .all<{ id: string; path: string }>();
 
@@ -878,7 +908,7 @@ async function moveDirectory(env: Env, srcDir: string, destDir: string): Promise
 
   // 也更新 directories 表中的子目录记录
   const { results: dirs } = await env.db
-    .prepare("SELECT path FROM directories WHERE path LIKE ?1")
+    .prepare("SELECT path FROM directories WHERE path LIKE ?1 ESCAPE '\\'")
     .bind(likePattern)
     .all<{ path: string }>();
 

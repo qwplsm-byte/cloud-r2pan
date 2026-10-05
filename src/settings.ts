@@ -382,22 +382,33 @@ export async function addTraffic(env: Env, bytes: number): Promise<void> {
   const day = now.toISOString().slice(0, 10);
 
   await env.db.batch([
-    // ① 同步 traffic_month 到当月（幂等：同月时 value 不变）
+    // ① 先更新 traffic_used_bytes —— 跨月判断完全内联在 SQL 子查询里
+    //
+    // ── C1 修复（两处）────────────────────────────────────────────
+    // (a) 语法：原语句 `CAST(... AS INTEGER) + ?2 AS TEXT)` 括号深度 -1（多一个右括号），
+    //     且 `表达式 AS TEXT` 非法 —— SQLite 直接 `near "AS": syntax error`，
+    //     整个 batch 回滚 → 流量/日志/扣费/通知全链路从未真正执行过。
+    // (b) 顺序：本语句必须排在 traffic_month 同步之前。原实现先写 month 再用子查询
+    //     比较 month，子查询恒等于当月 → ELSE '0'（清零分支）永远不可达 → 跨月不清零。
+    // (c) 改为 UPSERT：全新安装时 settings 里根本不存在 traffic_used_bytes 行，
+    //     纯 UPDATE 命中 0 行，流量同样永远记不上。
+    //
+    // 同月：累加旧值；跨月：从 0 开始加
+    env.db.prepare(
+      `INSERT INTO settings(key, value)
+       VALUES('traffic_used_bytes', CAST(?2 AS TEXT))
+       ON CONFLICT(key) DO UPDATE SET value = CAST(
+         (CASE
+            WHEN (SELECT value FROM settings WHERE key = 'traffic_month') = ?1
+            THEN COALESCE((SELECT value FROM settings WHERE key = 'traffic_used_bytes'), '0')
+            ELSE '0'
+          END) + ?2 AS TEXT)`
+    ).bind(month, String(bytes)),
+
+    // ② 同步 traffic_month 到当月（幂等：同月时 value 不变）—— 必须排在 ① 之后
     env.db.prepare(
       "INSERT INTO settings(key, value) VALUES('traffic_month', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     ).bind(month),
-
-    // ② 更新 traffic_used_bytes —— 跨月逻辑完全内联在 SQL 里
-    //    同月：累加旧值；跨月：从 0 开始加
-    env.db.prepare(
-      `UPDATE settings SET value = CAST(
-        CASE
-          WHEN (SELECT value FROM settings WHERE key = 'traffic_month') = ?1
-          THEN COALESCE((SELECT value FROM settings WHERE key = 'traffic_used_bytes'), '0')
-          ELSE '0'
-        END AS INTEGER) + ?2 AS TEXT)
-       WHERE key = 'traffic_used_bytes'`
-    ).bind(month, String(bytes)),
 
     // ③ traffic_stats 每日汇总（原本就是原子累加，保持不变）
     env.db.prepare(
