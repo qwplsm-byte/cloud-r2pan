@@ -10,12 +10,17 @@
    默认主题：简洁暗色（无玻璃模糊）
    ═══════════════════════════════════════════════════════════ */
 :root {
-  --bg-page: #0f0f10;
-  --orb-1: transparent; --orb-2: transparent; --orb-3: transparent;
-  --orb-opacity: 0;
+  /* ── 液态玻璃（D1）──────────────────────────────
+     原值：--bg-page:#0f0f10 · --orb-*:transparent · --orb-opacity:0 · --glass:#1c1c1f · --glass-strong:#242428
+     改造原因：折射必须有"背景内容"可弯。原先是**纯色背景 + 不透明面板 + 光斑关闭**，
+     等于即便挂上 hyalite 也什么都看不见（面板 100% 不透光，背景是一整块平色）。
+     现在：渐变底 + 三个光斑提供细节，面板改半透明把背景透出来。 */
+  --bg-page: linear-gradient(165deg, #0d0f16 0%, #131722 46%, #171a28 100%);
+  --orb-1: #22d3ee; --orb-2: #7c5cf6; --orb-3: #ec4899;
+  --orb-opacity: .32;
 
-  --glass: #1c1c1f;
-  --glass-strong: #242428;
+  --glass: rgba(255,255,255,.07);
+  --glass-strong: rgba(255,255,255,.11);
   --stroke: rgba(255,255,255,.08);
   --stroke-strong: rgba(255,255,255,.14);
 
@@ -68,12 +73,15 @@
    简洁亮色
    ═══════════════════════════════════════════════════════════ */
 :root[data-theme="light"] {
-  --bg-page: #f5f5f7;
-  --orb-1: transparent; --orb-2: transparent; --orb-3: transparent;
-  --orb-opacity: 0;
+  /* ── 液态玻璃（D1）：与 dark 主题同样改造 ─────────────────
+     原值：--bg-page:#f5f5f7 · --orb-*:transparent · --orb-opacity:0 · --glass:#ffffff · --glass-strong:#ffffff
+     切主题按钮在 dark ↔ light 之间来回切，只改 dark 的话点一下就"失去玻璃"。 */
+  --bg-page: linear-gradient(180deg, #f8f9fd 0%, #eef1f8 55%, #e9edf7 100%);
+  --orb-1: #38bdf8; --orb-2: #a78bfa; --orb-3: #f472b6;
+  --orb-opacity: .22;
 
-  --glass: #ffffff;
-  --glass-strong: #ffffff;
+  --glass: rgba(255,255,255,.72);
+  --glass-strong: rgba(255,255,255,.84);
   --stroke: rgba(0,0,0,.07);
   --stroke-strong: rgba(0,0,0,.14);
 
@@ -259,14 +267,18 @@ body {
 /* ── 玻璃卡片 ─────────────────────────── */
 .glass {
   background: var(--glass);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
+  /* D2：把折射从 apple* 专属下沉为基础能力 —— 现在四个主题都能挂 hyalite。
+     兜底值沿用原 apple 主题调好的参数，未挂载时是普通毛玻璃。 */
+  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   box-shadow: var(--shadow-glass);
 }
 :root[data-theme="apple"] .glass,
 :root[data-theme="apple-dark"] .glass {
-  backdrop-filter: blur(28px) saturate(170%); -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .glass { border: 1px solid var(--stroke-strong); }
@@ -276,13 +288,14 @@ body {
   position: sticky; top: 12px; z-index: 50; margin-bottom: 22px;
   display: flex; align-items: center; gap: 12px; padding: 12px 18px;
   background: var(--glass-strong);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
+  backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
   border: 1px solid var(--stroke); border-radius: 22px;
   box-shadow: var(--shadow-topbar-box);
 }
 :root[data-theme="apple"] .topbar,
 :root[data-theme="apple-dark"] .topbar {
-  /* 框架层挂液态玻璃：只有顶栏/侧栏/弹窗三个面，卡片列表保持 blur（几十个面挂折射会拖垮渲染） */
+  /* D2 已把折射下沉为基础能力，四个主题共用这条（apple* 仍有各自的边框/阴影差异） */
   backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
   -webkit-backdrop-filter: var(--hyalite, blur(30px) saturate(180%));
   border: 0.5px solid rgba(0,0,0,.08);
@@ -301,6 +314,7 @@ body {
   background: var(--sf); border: 1px solid var(--stroke);
   font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
   transition: background .2s;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .traffic-pill:hover { background: var(--sf-strong); }
 .traffic-pill .bar { width: 52px; height: 5px; border-radius: 3px; background: var(--track-bg); overflow: hidden; }
@@ -312,7 +326,8 @@ body {
 .sidebar {
   flex: none; width: 188px; padding: 14px 10px;
   background: var(--glass);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
+  backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
+  -webkit-backdrop-filter: var(--hyalite, blur(28px) saturate(170%));
   border: 1px solid var(--stroke); border-radius: 22px;
   box-shadow: var(--shadow-glass);
   display: flex; flex-direction: column; gap: 4px; position: sticky; top: 90px;
@@ -441,7 +456,8 @@ body {
   background: var(--glass-strong); color: var(--text); font-size: 13.5px; font-weight: 600; font-family: inherit;
   cursor: pointer; transition: all .18s cubic-bezier(.22,1.2,.36,1); white-space: nowrap;
   box-shadow: var(--shadow-btn-plain);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: var(--hyalite, blur(12px));
+  -webkit-backdrop-filter: var(--hyalite, blur(12px));
 }
 .btn:hover { background: var(--btn-hover-bg); box-shadow: var(--shadow-btn-plain-hover); transform: translateY(-1px); }
 .btn:active { transform: translateY(0) scale(.97); box-shadow: var(--shadow-btn-plain); }
@@ -466,13 +482,16 @@ body {
   margin-bottom: 18px; padding: 34px 20px; text-align: center; cursor: pointer;
   border: 1.5px dashed var(--dashed-border); border-radius: var(--radius);
   background: var(--dropzone-bg); transition: all .2s;
+  /* 新增玻璃面：兜底 none → 非 Chromium 外观与改造前一致 */
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .dropzone:hover, .dropzone.over { background: var(--dropzone-hover-bg); border-color: var(--dashed-border-strong); transform: scale(1.005); }
 .dropzone .icon { font-size: 34px; margin-bottom: 10px; }
 .dropzone .t { font-size: 15px; font-weight: 650; }
 .dropzone .d { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
 .upload-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-top: 10px;
-  border-radius: 16px; background: var(--sf); border: 1px solid var(--stroke); font-size: 13.5px; }
+  border-radius: 16px; background: var(--sf); border: 1px solid var(--stroke); font-size: 13.5px;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none); }
 .upload-item .prog { flex: 1; height: 6px; border-radius: 3px; background: var(--bar-bg); overflow: hidden; }
 .upload-item .prog i { display: block; height: 100%; width: 0; border-radius: 3px;
   background: linear-gradient(90deg,#34d399,#0a84ff); transition: width .2s; }
@@ -485,6 +504,7 @@ body {
   width: 100%; padding: 12px 14px; border-radius: 14px; font-size: 15px; font-family: inherit;
   color: var(--text); background: var(--sf-input); border: 1px solid var(--stroke-strong); outline: none;
   transition: border .2s, background .2s; -webkit-appearance: none; appearance: none;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .field input:focus { border-color: rgba(10,132,255,.7); background: var(--sf-input-focus); }
 .field input::placeholder { color: var(--text-3); }
@@ -496,12 +516,14 @@ body {
   background: var(--glass);
   border: 1px solid var(--stroke);
   box-shadow: var(--shadow-glass);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
+  backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
 }
 :root[data-theme="apple"] .group,
 :root[data-theme="apple-dark"] .group {
   border: 0.5px solid rgba(0,0,0,.08);
-  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(20px) saturate(180%));
 }
 :root[data-theme="apple-dark"] .group {
   background: linear-gradient(150deg, rgba(255,255,255,.1), rgba(255,255,255,.045));
@@ -541,14 +563,16 @@ body {
 
 /* ── 模态框（底部弹层风格） ───────────── */
 .modal-mask { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-end; justify-content: center;
-  background: rgba(0,0,0,.35); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background: rgba(0,0,0,.35);
+  backdrop-filter: var(--hyalite, blur(8px)); -webkit-backdrop-filter: var(--hyalite, blur(8px));
   animation: fadeIn .25s both; }
 @media (min-width: 640px) { .modal-mask { align-items: center; padding-bottom: 0; } }
 .modal {
   width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto; overscroll-behavior: contain;
   padding: 26px; border-radius: 32px 32px 0 0;
   background: var(--glass-strong);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
+  backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
   border: 1px solid var(--stroke); border-bottom: none;
   box-shadow: var(--shadow-modal);
   animation: sheetUp .4s cubic-bezier(.22,1.1,.36,1) both;
@@ -582,13 +606,15 @@ body {
 .toast {
   padding: 11px 22px; border-radius: 16px; font-size: 14px; font-weight: 600; color: var(--text);
   background: var(--glass-strong);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
+  backdrop-filter: var(--hyalite, blur(20px));
+  -webkit-backdrop-filter: var(--hyalite, blur(20px));
   border: 1px solid var(--stroke); box-shadow: var(--shadow-toast);
   animation: toastIn .35s cubic-bezier(.22,1.2,.36,1) both; max-width: 86vw; text-align: center;
 }
 :root[data-theme="apple"] .toast,
 :root[data-theme="apple-dark"] .toast {
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: var(--hyalite, blur(20px));
+  -webkit-backdrop-filter: var(--hyalite, blur(20px));
   border: 0.5px solid rgba(0,0,0,.08);
 }
 .toast.ok { border-color: rgba(52,211,153,.5); }
@@ -4519,15 +4545,39 @@ function showRecoveryCodes(codes){
 })();
 
 /* ═══════════ 液态玻璃 ═══════════
-   只给框架层挂折射：顶栏、侧栏、弹窗，合计三个 render surface。
-   `.glass` / `.group` 在各视图里有 40+ 处，每个面都要独立开一层，
-   全挂会撞上 hyalite 自己的性能告警（"hundreds are not fine"），
-   也让密集的后台界面变得花哨 —— 故保持原来的 blur。
-   这三条 CSS 都写在 `:root[data-theme="apple*"]` 下、基础态是 backdrop-filter:none，
-   所以非苹果主题下即使挂载了也不会出现折射。 */
+   四套主题现在**全部**具备折射条件（D1 给 dark/light 补了渐变背景 + 光斑 + 半透明面板，
+   D2 把 backdrop-filter 从 apple* 下沉到了基础规则），所以这里可以全量挂载。
+
+   只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false → 不写 --hyalite →
+   走 CSS 里的 blur() / none 兜底。
+
+   ── 分三档控成本（hyalite 每个面独占一层渲染）──────────────────
+   色散会多出两趟位移 + 两趟合成，sat!==1 会多出 7 个滤镜节点，所以按面的大小配参数：
+
+     S   框架（顶栏 / 侧栏 / 弹窗）—— 全页就这3个，允许满效果
+     M   面板（.glass / .group）—— 各视图里几十处，关色散 + 关饱和增益（省 4 趟合成 + 7 节点）
+     XS  小件（按钮 / 提示 / 输入框 / 上传条）—— 面积极小，参数压到最低
+
+   ── 被有意排除的元素 ─────────────────────────────
+     .btn.primary   实色渐变，折射会被自己的背景盖掉，挂了等于白占一层
+     .modal-mask    全屏遮罩，挂上去是整屏一个渲染面，成本最高、收益最低
+     .sb-main / .group .row / .switch   background: transparent，没有背景可弯
+
+   ── 若仍嫌卡 ───────────────────────────────────
+     一键降级：Hyalite.setOpts({ dispersion: 0, sat: 1 });
+     彻底关闭：<html data-hyalite="off">（或在控制台 Hyalite.force(false)） */
 if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.topbar, .sidebar', { bevel: 16, thickness: 28 });
-  Hyalite.watch(document, '.modal', { bevel: 24, thickness: 40 });
+  // S 档：框架层
+  Hyalite.watch(document, '.topbar, .sidebar, .modal', { bevel: 18, thickness: 32 });
+
+  // M 档：面板层
+  Hyalite.watch(document, '.glass, .group',
+    { bevel: 14, thickness: 26, dispersion: 0, sat: 1 });
+
+  // XS 档：小件
+  Hyalite.watch(document,
+    '.btn:not(.primary), .toast, .traffic-pill, .dropzone, .upload-item, .field input, .field select',
+    { bevel: 6, thickness: 10, dispersion: 0, sat: 1, smooth: 0, rim: .9, edgeW: 5 });
 }
 </script>
 </body>

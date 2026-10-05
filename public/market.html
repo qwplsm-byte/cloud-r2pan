@@ -36,7 +36,7 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 .search input{
   width:100%;padding:14px 48px 14px 20px;border-radius:16px;
   background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
-  backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:16px;
+  backdrop-filter:var(--hyalite,blur(20px));border:1px solid rgba(255,255,255,.22);color:#fff;font-size:16px;
   outline:none;transition:border-color .2s,box-shadow .2s;
 }
 .search input:focus{border-color:rgba(56,189,248,.7);box-shadow:0 0 0 4px rgba(56,189,248,.15)}
@@ -45,7 +45,7 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 .sort select{
   padding:14px 44px 14px 20px;border-radius:16px;
   background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.05));
-  backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:16px;
+  backdrop-filter:var(--hyalite,blur(20px));border:1px solid rgba(255,255,255,.22);color:#fff;font-size:16px;
   appearance:none;cursor:pointer;outline:none;min-width:150px;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 16px center;
@@ -68,7 +68,7 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 /* 悬停态同样要接上 --hyalite-edge，否则一悬停 hyalite 的锐边就消失 */
 .card:hover{transform:translateY(-4px);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.4)),0 18px 40px rgba(0,0,0,.35);border-color:rgba(56,189,248,.5)}
 .card-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px}
-.icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.icon{width:52px;height:52px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.25);box-shadow:var(--hyalite-edge,inset 0 1px 0 rgba(255,255,255,.3));backdrop-filter:var(--hyalite,none);-webkit-backdrop-filter:var(--hyalite,none)}
 .title{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.3;margin-bottom:4px;word-break:break-word}
 .title .alt{color:rgba(255,255,255,.55);font-weight:400;font-size:13px}
 .desc{font-size:13px;color:rgba(255,255,255,.6);line-height:1.55;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
@@ -95,7 +95,7 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
   min-width:38px;height:38px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.22);
   background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.04));
   color:#fff;font-size:14px;cursor:pointer;transition:all .2s;
-  backdrop-filter:blur(10px);
+  backdrop-filter:var(--hyalite,blur(10px));
 }
 .pagination button:hover:not(:disabled){background:rgba(255,255,255,.2);transform:translateY(-1px)}
 .pagination button.active{background:linear-gradient(180deg,#3d9bff,#0a7cff);border-color:transparent;box-shadow:0 6px 18px rgba(10,124,255,.35)}
@@ -109,7 +109,7 @@ h1{font-size:28px;font-weight:700;letter-spacing:-.02em;background:linear-gradie
 footer{text-align:center;font-size:12px;color:rgba(255,255,255,.3);margin-top:40px}
 footer a{color:rgba(56,189,248,.8);text-decoration:none}
 
-.lang-btn{margin-left:10px;padding:4px 13px;border-radius:11px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);color:#fff;font-size:12px;cursor:pointer;backdrop-filter:blur(10px);transition:all .15s}
+.lang-btn{margin-left:10px;padding:4px 13px;border-radius:11px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);color:#fff;font-size:12px;cursor:pointer;backdrop-filter:var(--hyalite,blur(10px));transition:all .15s}
 .lang-btn:hover{background:rgba(255,255,255,.2);color:#fff}
 </style>
 </head>
@@ -434,13 +434,20 @@ function renderEmpty(emoji, title, desc){
 }
 
 /* ═══════════ 液态玻璃 ═══════════
-   网格卡片是本页主体，一页可能同时挂着十几张 —— 每张都是独立 render surface，
-   所以卡片关掉色散（dispersion:0）：省掉两趟位移 + 两趟合成，单张成本约降一半，
-   折射本身照常保留。brand-icon 是主视觉且只有一张，色散留着。
-   非 Chromium 引擎 supported() 为 false，完全不写 --hyalite，CSS 里的 blur() 兜底生效。 */
+   只有 Chromium 渲染折射；其余引擎 supported() 为 false → 不写 --hyalite → 走原 blur，外观不变。
+   分三档（hyalite 每个面独占一层渲染）：
+     S   .brand-icon —— 全页唯一的品牌主视觉，只有一张，保留色散
+     M   .card       —— 网格一页可能十几张，关色散（dispersion:0）省掉两趟位移 + 两趟合成
+     XS  卡内图标与工具条小件 —— 面积极小，关色散 + 关 smooth + 关饱和增益
+   注意 .icon 嵌在 .card 里，会额外开一层渲染面，所以给它最省的一档。 */
 if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.card', { bevel: 20, thickness: 34, dispersion: 0 });
   Hyalite.watch(document, '.brand-icon', { bevel: 14, thickness: 26 });
+
+  Hyalite.watch(document, '.card', { bevel: 20, thickness: 34, dispersion: 0 });
+
+  Hyalite.watch(document,
+    '.icon, .search input, .sort select, .pagination button, .lang-btn',
+    { bevel: 6, thickness: 10, dispersion: 0, smooth: 0, sat: 1, rim: 1 });
 }
 
 // 初始

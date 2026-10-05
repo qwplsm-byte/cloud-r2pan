@@ -69,6 +69,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 .stat {
   flex: 1; padding: 14px 8px; border-radius: 20px;
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+  /* 新增玻璃面：兜底 none，非 Chromium 上外观与改造前完全一致 */
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .stat .v { font-size: 20px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .stat .k { margin-top: 3px; font-size: 12px; color: rgba(255,255,255,.6); }
@@ -101,7 +103,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 .brand b { font-weight: 650; }
 .lang-btn { margin-left: 10px; padding: 4px 13px; border-radius: 11px; border: 1px solid rgba(255,255,255,.22);
   background: rgba(255,255,255,.1); color: rgba(255,255,255,.75); font-size: 12px; font-family: inherit;
-  letter-spacing: 0; cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  letter-spacing: 0; cursor: pointer;
+  backdrop-filter: var(--hyalite, blur(10px)); -webkit-backdrop-filter: var(--hyalite, blur(10px));
   transition: all .2s; vertical-align: 1px; }
 .lang-btn:hover { background: rgba(255,255,255,.2); color: #fff; }
 
@@ -129,6 +132,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   width: 100%; margin-top: 22px; padding: 16px; border-radius: 16px; text-align: center;
   font-size: 17px; font-family: inherit; color: #fff; outline: none;
   background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.28);
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .pw input::placeholder { color: rgba(255,255,255,.45); }
 .pw input:focus { border-color: #3d9bff; }
@@ -146,6 +150,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   width: 100%; margin-top: 22px; padding: 14px; border-radius: 16px;
   background: rgba(110,231,183,.15); border: 1px solid rgba(110,231,183,.4);
   color: #6ee7b7; font-size: 14px; text-align: center; font-weight: 600;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .ts-blocked-title { margin-top: 22px; font-size: 14px; color: #fde68a; font-weight: 600; }
 .ts-blocked-hint { margin-top: 6px; font-size: 12.5px; color: rgba(255,255,255,.6); line-height: 1.6; }
@@ -180,7 +185,8 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 /* ═══════ 激活码弹窗 ═══════ */
 .code-modal-mask {
   position: fixed; inset: 0; z-index: 100;
-  background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background: rgba(0,0,0,.55);
+  backdrop-filter: var(--hyalite, blur(8px)); -webkit-backdrop-filter: var(--hyalite, blur(8px));
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn .2s both;
 }
@@ -189,9 +195,11 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   width: min(400px, 92vw); max-height: min(86vh, 86svh); overflow-y: auto;
   padding: 26px 24px 22px; border-radius: 28px;
   background: linear-gradient(160deg, rgba(30,28,60,.95), rgba(15,13,38,.96));
-  backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
+  -webkit-backdrop-filter: var(--hyalite, blur(40px) saturate(180%));
   border: 1px solid rgba(255,255,255,.2);
-  box-shadow: 0 -20px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.15);
+  /* 原投影在前、inset 高光原位替换：未挂载时阴影顺序与改造前完全一致 */
+  box-shadow: 0 -20px 60px rgba(0,0,0,.5), var(--hyalite-edge, inset 0 1px 0 rgba(255,255,255,.15));
   animation: sheetUp .35s cubic-bezier(.22,1.1,.36,1) both;
 }
 @keyframes sheetUp { from { transform: translateY(40px) scale(.95); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -202,11 +210,13 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   border-radius: 50%; border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.06);
   color: rgba(255,255,255,.6); cursor: pointer; font-size: 16px;
   display: flex; align-items: center; justify-content: center; transition: all .15s;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .code-modal .close:hover { background: rgba(255,255,255,.15); color: #fff; }
 .code-bound-row {
   margin-top: 16px; padding: 14px 16px; border-radius: 16px;
   background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.35);
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .code-bound-row .label { font-size: 11px; color: rgba(110,231,183,.8); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
 .code-bound-row .code { font-family: ui-monospace,'SF Mono',monospace; font-size: 14px; color: #6ee7b7; margin-top: 4px; letter-spacing: .03em; }
@@ -215,6 +225,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15);
   background: rgba(255,255,255,.06); color: rgba(255,255,255,.7); font-size: 12px;
   cursor: pointer; transition: all .15s;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .code-bound-row .unbind-btn:hover { background: rgba(255,69,58,.15); border-color: rgba(255,69,58,.4); color: #ffb3ae; }
 .code-input-row {
@@ -225,6 +236,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   font-family: ui-monospace,'SF Mono',monospace; color: #fff; outline: none;
   background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18);
   letter-spacing: .04em; text-align: center;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .code-input-row input:focus { border-color: #3d9bff; background: rgba(255,255,255,.12); }
 .code-input-row input::placeholder { color: rgba(255,255,255,.35); }
@@ -233,6 +245,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   flex: 1; padding: 12px 14px; border-radius: 13px; border: 1px solid rgba(255,255,255,.2);
   background: rgba(255,255,255,.08); color: #fff; font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all .15s; font-family: inherit;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .code-btn-row button:hover { background: rgba(255,255,255,.15); }
 .code-btn-row button.primary {
@@ -244,6 +257,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   margin-top: 12px; padding: 12px 14px; border-radius: 12px; font-size: 13px;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
   color: rgba(255,255,255,.8); min-height: 20px;
+  backdrop-filter: var(--hyalite, none); -webkit-backdrop-filter: var(--hyalite, none);
 }
 .code-query-result.ok { background: rgba(52,211,153,.12); border-color: rgba(52,211,153,.35); color: #6ee7b7; }
 .code-query-result.warn { background: rgba(255,159,10,.12); border-color: rgba(255,159,10,.35); color: #fcd34d; }
@@ -1020,12 +1034,29 @@ async function wireUnlock(d, ts, tsEnabled, tsOnDownload, oauthEnabled, oauthAut
 /* ═══════════ 液态玻璃 ═══════════
    把毛玻璃升级为真折射：按元素实际尺寸算 SDF 透镜位移图 → SVG 滤镜 → backdrop-filter。
    只有 Chromium 渲染折射；Safari / Firefox 下 supported() 为 false，完全不写 --hyalite，
-   CSS 里的 blur() 兜底自动生效，视觉与改造前一致。
-   分两组 watch —— 大面板与小挂件的透镜比例不同：主卡 bevel 必须小于其 36px 内边距，
-   文字才落在清晰区；小圆钮则让透镜铺满整个圆（hyalite 允许 bevel 一直算到圆心）。 */
+   CSS 里的 blur() / none 兜底生效，视觉与改造前一致。
+
+   分三档传参 —— hyalite 每个面都要独立开一层渲染，色散会多出两趟位移 + 两趟合成，
+   所以面越小参数越省：
+     S   主卡（面大、是页面主角，允许满效果）
+     M   中等面（图标 / 圆钮 / 状态条，色散降到 1.2）
+     XS  输入框与小按钮（面积极小 → 关色散、关 smooth、关饱和增益）
+
+   ⚠️ 故意不挂 .code-modal 与 .code-modal-mask：
+     前者背景 rgba(30,28,60,.95) 只透出 5%，折射再准也看不见，纯属白占一层渲染；
+     后者是全屏遮罩 rgba(0,0,0,.55)，挂上去等于整屏开一个渲染面，成本最高收益最低。
+     两者 CSS 已转成 var(--hyalite, 原值)，但从不写入 --hyalite → 永远走原 blur。
+     想要的话在下面任一 watch 的选择器里加上即可。 */
 if (window.Hyalite && Hyalite.supported()) {
   Hyalite.watch(document, '.card', { bevel: 26, thickness: 44 });
-  Hyalite.watch(document, '.file-icon, .octo-float, .code-float', { bevel: 14, thickness: 26 });
+
+  Hyalite.watch(document,
+    '.file-icon, .octo-float, .code-float, .stat, .ts-passed, .code-bound-row, .code-query-result',
+    { bevel: 14, thickness: 26, dispersion: 1.2 });
+
+  Hyalite.watch(document,
+    '.pw input, .code-input-row input, .code-btn-row button, .code-modal .close, .unbind-btn, .lang-btn',
+    { bevel: 6, thickness: 10, dispersion: 0, smooth: 0, sat: 1, rim: 1 });
 }
 
 boot();
