@@ -18,16 +18,23 @@ body {
   background: linear-gradient(160deg, #0b1026 0%, #1a1240 45%, #2a1045 100%);
   -webkit-tap-highlight-color: transparent;
 }
-/* ── 背景：折射的"原料" ───────────────────────
-   玻璃只有在背后有色彩与细节时才看得出被弯。原值 .5/.5/.35 太淡，
-   这里提到 .78/.78/.55 并新增第 4 个琥珀光斑，制造暖冷对置的区域，
-   色散（边缘彩虹）才有颜色可分。 */
-.orb { position: fixed; border-radius: 50%; filter: blur(64px); opacity: .78; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
-.o1 { width: 46vmax; height: 46vmax; background: #38bdf8; top: -18%; left: -14%; }
-.o2 { width: 40vmax; height: 40vmax; background: #8b5cf6; bottom: -20%; right: -10%; animation-delay: -6s; }
-.o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 55%; left: 8%; animation-delay: -12s; opacity: .55; }
-.o4 { width: 34vmax; height: 34vmax; background: #f59e0b; top: 14%; right: -10%; animation-delay: -3s; opacity: .5; }
-@keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(6vw, -5vh) scale(1.12); } }
+/* ── 背景光斑：折射的"原料" ───────────────────────
+   ⚠️ 性能：不再用 filter:blur() + drift 动画。
+   原实现每个光斑跑 `filter: blur(64px)` 且带 18s 无限 transform 动画 ——
+   blur 的滤镜区域要向四周外扩 3σ(≈192px)，一个 46vmax 圆在 1920 屏上
+   ≈ 1267×1267，DPR2 下约 640 万像素，**每帧重新模糊一次** ×4 个。
+   这是全站最贵的开销，而且与液态玻璃无关。
+   改成 radial-gradient：渐变本身在光栅化时只算一次，动画/滚动不再碰它，
+   观感（柔和的光晕）与 blur 几乎无差。 */
+.orb { position: fixed; border-radius: 50%; pointer-events: none; }
+.o1 { width: 46vmax; height: 46vmax; top: -18%; left: -14%; opacity: .78;
+      background: radial-gradient(circle, #38bdf8 0%, #38bdf8 24%, rgba(56,189,248,0) 70%); }
+.o2 { width: 40vmax; height: 40vmax; bottom: -20%; right: -10%; opacity: .78;
+      background: radial-gradient(circle, #8b5cf6 0%, #8b5cf6 24%, rgba(139,92,246,0) 70%); }
+.o3 { width: 30vmax; height: 30vmax; top: 55%; left: 8%; opacity: .55;
+      background: radial-gradient(circle, #ec4899 0%, #ec4899 24%, rgba(236,72,153,0) 70%); }
+.o4 { width: 34vmax; height: 34vmax; top: 14%; right: -10%; opacity: .5;
+      background: radial-gradient(circle, #f59e0b 0%, #f59e0b 24%, rgba(245,158,11,0) 70%); }
 
 .card {
   position: relative; width: 100%; max-width: 440px;
@@ -65,11 +72,13 @@ body {
   position: relative; overflow: hidden;
 }
 .file-icon::after {
+  /* 性能：去掉无限 shine 动画。.file-icon 挂了 backdrop-filter，
+     在它上面跑 transform 动画会逼浏览器每帧重新采样并重滤背景。
+     静态的斜向高光已经够用。 */
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.35) 48%, transparent 62%);
-  transform: translateX(-120%); animation: shine 4.5s ease-in-out infinite;
+  opacity: .7;
 }
-@keyframes shine { 0%, 60% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
 .file-icon .ext { font-size: 26px; font-weight: 800; letter-spacing: -.02em; text-shadow: 0 2px 8px rgba(0,0,0,.25); }
 
 h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: break-all; line-height: 1.35; }
@@ -296,11 +305,7 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
 /* 伪元素需要定位上下文（这些元素原本没有 position） */
 .stat, .ts-passed, .code-bound-row, .code-query-result { position: relative; }
 
-@keyframes lg-shimmer {
-  0%   { background-position: 0 0, 0 0, -200% 0; }
-  100% { background-position: 0 0, 0 0, 200% 0; }
-}
-@keyframes lg-specular { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+/* lg-shimmer / lg-specular 关键帧已删除：无处使用（见下方性能说明）。 */
 
 /* ③ + ⑥：顶光 / 1px 镜面高光线 / 流光条（静态）
    ⚠️ 性能：这条规则**不带 animation**。
@@ -319,10 +324,9 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   background-size: 100% 100%, 100% 1px, 200% 100%;
   background-repeat: no-repeat;
 }
-/* 动效只给唯一的主卡：流光（重绘型）+ 呼吸（opacity 可合成） */
-.card::before {
-  animation: lg-shimmer 7s linear infinite, lg-specular 5s ease-in-out infinite;
-}
+/* 性能：原先这里跑 lg-shimmer + lg-specular —— lg-shimmer 动的是
+   background-position，**每帧重绘整卡的图层**，是滑动卡顿的直接来源。
+   静态高光线本身就是 Apple 卡片的样子，去掉动画后重绘为 0。 */
 
 /* ④：棱镜色边 —— 左蓝右品红，上下绿黄（GlassKit/Z1Code 的四边波长差） */
 .card::after, .octo-float::after, .code-float::after,

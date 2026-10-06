@@ -252,12 +252,16 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 
-/* ── 背景光斑 ─────────────────────────── */
-.orb { position: fixed; border-radius: 50%; filter: blur(72px); opacity: .45; pointer-events: none; animation: drift 22s ease-in-out infinite alternate; z-index: 0; }
-.o1 { width: 52vmax; height: 52vmax; background: var(--orb-1); top: -20%; left: -16%; opacity: var(--orb-opacity); }
-.o2 { width: 44vmax; height: 44vmax; background: var(--orb-2); bottom: -22%; right: -12%; animation-delay: -8s; opacity: var(--orb-opacity); }
-.o3 { width: 30vmax; height: 30vmax; background: var(--orb-3); top: 48%; left: 12%; animation-delay: -15s; opacity: var(--orb-opacity); }
-@keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(5vw,-6vh) scale(1.15); } }
+/* ── 背景光斑 ───────────────────────────
+   ⚠️ 性能：去掉 filter:blur(72px) + drift 无限动画 —— 每帧重模糊数百万像素 ×3，
+   且与液态玻璃无关，是后台滚动卡顿的最大来源。改用径向渐变（光栅化时只算一次）。 */
+.orb { position: fixed; border-radius: 50%; pointer-events: none; z-index: 0; }
+.o1 { width: 52vmax; height: 52vmax; top: -20%; left: -16%; opacity: var(--orb-opacity);
+      background: radial-gradient(circle, var(--orb-1) 0%, transparent 70%); }
+.o2 { width: 44vmax; height: 44vmax; bottom: -22%; right: -12%; opacity: var(--orb-opacity);
+      background: radial-gradient(circle, var(--orb-2) 0%, transparent 70%); }
+.o3 { width: 30vmax; height: 30vmax; top: 48%; left: 12%; opacity: var(--orb-opacity);
+      background: radial-gradient(circle, var(--orb-3) 0%, transparent 70%); }
 
 /* ── 布局 ─────────────────────────────── */
 #app { position: relative; z-index: 1; }
@@ -294,16 +298,21 @@ body {
   position: sticky; top: 12px; z-index: 50; margin-bottom: 22px;
   display: flex; align-items: center; gap: 12px; padding: 12px 18px;
   background: var(--glass-strong);
-  backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
+  /* ── 性能：去掉 hyalite 折射与提色，只留一层纯 blur ──
+     .topbar 是 sticky 且横跨整宽：页面一滚动，背后内容每帧都在变，
+     Chromium 必须**每帧**把背后区域重新读出来、重新滤一遍。
+     再叠上 hyalite 的位移图 + 色散(2 位移 2 合成) + sat≠1 的 7 个滤镜节点
+     + saturate(1.6) brightness(1.08)，单帧成本是纯 blur 的好几倍。
+     纯 blur(24px) 保留玻璃的通透感，成本降到约 1/4。
+     ③高光线 ④色边 ⑤发丝环(静态 CSS)全部保留，观感主要来自这三层。 */
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--stroke); border-radius: 22px;
   box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-topbar-box);
 }
 :root[data-theme="apple"] .topbar,
 :root[data-theme="apple-dark"] .topbar {
-  /* D2 已把折射下沉为基础能力，四个主题共用这条（apple* 仍有各自的边框/阴影差异） */
-  backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(30px)) saturate(1.6) brightness(1.08);
+  /* apple* 同样走纯 blur（这条覆盖本来就是 D2 把折射下沉时写的） */
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .topbar { border: 1px solid var(--stroke-strong); box-shadow: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25); }
@@ -332,8 +341,9 @@ body {
 .sidebar {
   flex: none; width: 188px; padding: 14px 10px;
   background: var(--glass);
-  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  /* 性能：同 .topbar —— sticky + 内容在背后滚动 → 每帧重新采样。
+     改纯 blur(24px)，去掉 hyalite 位移/色散/提色链。 */
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--stroke); border-radius: 22px;
   box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
   display: flex; flex-direction: column; gap: 4px; position: sticky; top: 90px;
@@ -341,8 +351,7 @@ body {
 }
 :root[data-theme="apple"] .sidebar,
 :root[data-theme="apple-dark"] .sidebar {
-  backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
-  -webkit-backdrop-filter: var(--hyalite, blur(28px)) saturate(1.6) brightness(1.08);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border: 0.5px solid rgba(0,0,0,.08);
 }
 :root[data-theme="apple-dark"] .sidebar { border: 1px solid var(--stroke-strong); box-shadow: 0 16px 44px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22); }
@@ -699,11 +708,7 @@ body {
    ═══════════════════════════════════════════════════════════ */
 .glass, .group, .modal { position: relative; }
 
-@keyframes lg-shimmer {
-  0%   { background-position: 0 0, 0 0, -200% 0; }
-  100% { background-position: 0 0, 0 0, 200% 0; }
-}
-@keyframes lg-specular { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+/* lg-shimmer / lg-specular 关键帧已删除：本页已无任何 lg-* 动画。 */
 
 /* ⚠️ 性能：这条规则**不带 animation**。
    lg-shimmer 动的是 background-position → 每帧重绘该元素所在层。
@@ -4627,9 +4632,16 @@ function showRecoveryCodes(codes){
    色散关掉（dispersion:0）：省每面 2 趟位移 + 2 趟合成，
    彩虹边缘由纯 CSS 的 ④ 棱镜色边提供，视觉损失很小。
    XS 小件、.glass/.group 见上方 CSS 的"性能回退"注释。 */
+/* ── 挂载：只剩 .modal ──
+   .topbar/.sidebar 已改纯 blur（见 CSS 处：sticky + 背后内容滚动 = 每帧重采样，
+   叠 hyalite 链成本太高），.glass/.group 本就是 none，XS 小件从不挂载。
+   .modal 是 openModal() 动态 innerHTML 创建的，且 closeModal() 会 remove()，
+   所以仍需 watch 才能捕获；但它只在弹窗打开时存在，且 fixed 全屏遮罩在打开期间
+   背后内容不滚动 → 打开期间的重采样是静止的，代价可接受。
+   色散 0 + sat 1：省 2 位移 + 2 合成 + 7 个滤镜节点。 */
 if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.topbar, .sidebar, .modal',
-    { bevel: 37, thickness: 59, dispersion: 0, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10 });
+  Hyalite.watch(document, '.modal',
+    { bevel: 37, thickness: 59, dispersion: 0, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10, sat: 1 });
 }
 </script>
 </body>

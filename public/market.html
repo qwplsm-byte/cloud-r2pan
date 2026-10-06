@@ -18,13 +18,14 @@ body{
   color:#fff;background:linear-gradient(160deg,#0b1026 0%,#1a1240 45%,#2a1045 100%);
   padding:24px 20px 80px;min-height:100vh;position:relative;overflow-x:hidden;
 }
-/* ── 背景：折射的原料（原值 .5/.5/.35 太淡，加到 .78/.78/.55 并新增琥珀光斑）── */
-.orb{position:fixed;border-radius:50%;filter:blur(64px);opacity:.78;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
-.o1{width:46vmax;height:46vmax;background:#38bdf8;top:-18%;left:-14%}
-.o2{width:40vmax;height:40vmax;background:#8b5cf6;bottom:-20%;right:-10%;animation-delay:-6s}
-.o3{width:30vmax;height:30vmax;background:#ec4899;top:55%;left:8%;animation-delay:-12s;opacity:.55}
-.o4{width:34vmax;height:34vmax;background:#f59e0b;top:14%;right:-10%;animation-delay:-3s;opacity:.5}
-@keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(6vw,-5vh) scale(1.12)}}
+/* ── 背景光斑：折射的原料 ──
+   ⚠️ 性能：去掉 filter:blur(64px) + drift 无限动画（同 share 页说明 ——
+   每帧重模糊约 640 万像素 ×4 是全站最大开销），改用径向渐变，观感一致。 */
+.orb{position:fixed;border-radius:50%;pointer-events:none}
+.o1{width:46vmax;height:46vmax;top:-18%;left:-14%;opacity:.78;background:radial-gradient(circle,#38bdf8 0%,#38bdf8 24%,rgba(56,189,248,0) 70%)}
+.o2{width:40vmax;height:40vmax;bottom:-20%;right:-10%;opacity:.78;background:radial-gradient(circle,#8b5cf6 0%,#8b5cf6 24%,rgba(139,92,246,0) 70%)}
+.o3{width:30vmax;height:30vmax;top:55%;left:8%;opacity:.55;background:radial-gradient(circle,#ec4899 0%,#ec4899 24%,rgba(236,72,153,0) 70%)}
+.o4{width:34vmax;height:34vmax;top:14%;right:-10%;opacity:.5;background:radial-gradient(circle,#f59e0b 0%,#f59e0b 24%,rgba(245,158,11,0) 70%)}
 
 .container{max-width:1200px;margin:0 auto;position:relative;z-index:1}
 header{margin-bottom:32px;animation:rise .5s cubic-bezier(.22,1.2,.36,1) both}
@@ -129,9 +130,6 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
    ═══════════════════════════════════════════════════════════ */
 .brand-icon,.icon{position:relative}
 
-@keyframes lg-shimmer{0%{background-position:0 0,0 0,-200% 0}100%{background-position:0 0,0 0,200% 0}}
-@keyframes lg-specular{0%,100%{opacity:.55}50%{opacity:1}}
-
 /* ═══════════════════════════════════════════════════════════
    液态玻璃装饰层（lg-*）—— 做法取自 Z1Code / GlassKit / nikdelvin
      ③ 镜面高光线 + ⑥ 流光条 → ::before
@@ -150,9 +148,8 @@ footer a{color:rgba(56,189,248,.8);text-decoration:none}
     linear-gradient(105deg,transparent 40%,rgba(255,255,255,.10) 50%,transparent 60%);
   background-size:100% 100%,100% 1px,200% 100%;background-repeat:no-repeat;
 }
-.brand-icon::before{
-  animation:lg-shimmer 7s linear infinite,lg-specular 5s ease-in-out infinite;
-}
+/* 性能：原先给 .brand-icon 跑 lg-shimmer + lg-specular（每帧重绘），已移除 ——
+   静态高光线 + 色边足够撑起质感，重绘降到 0。 */
 .card::after,.brand-icon::after,.icon::after{
   content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;
   box-shadow:
