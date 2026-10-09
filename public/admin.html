@@ -263,6 +263,12 @@ body {
 .o3 { width: 30vmax; height: 30vmax; top: 48%; left: 12%; opacity: var(--orb-opacity);
       background: radial-gradient(circle, var(--orb-3) 0%, transparent 70%); }
 
+/* ── 自定义背景图（固定层，位于内容与光斑之下） ── */
+#bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; display: none;
+  background-size: cover; background-position: center; background-repeat: no-repeat; }
+#bg-layer.on { display: block; }
+#bg-dim { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .25s; }
+
 /* ── 布局 ─────────────────────────────── */
 #app { position: relative; z-index: 1; }
 .wrap { max-width: 1280px; margin: 0 auto; padding: 20px clamp(14px, 3vw, 28px) 60px; }
@@ -741,15 +747,36 @@ body {
   /* 本页已无 lg-* 动画，保留此块以便日后加回时自动受 reduced-motion 约束 */
   .glass::before, .group::before, .topbar::before, .sidebar::before, .modal::before { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   液态玻璃（自写实现）—— SVG feDisplacementMap 折射 + 背景模糊
+   参考 rdev/liquid-glass-react 的思路：
+     1) 256×256 位移贴图（R=水平位移, G=垂直位移，128=不位移）
+     2) SVG <feImage> 读入贴图 → <feDisplacementMap> 作用于 backdrop
+     3) backdrop-filter: url(#lg-filter) 应用到顶栏 / 登录卡片
+   不支持 backdrop-filter url() 的浏览器（Firefox / 部分 Safari）
+   自动停留在普通毛玻璃，功能不受影响。
+   ═══════════════════════════════════════════════════════════ */
+:root[data-lg="on"] .topbar,
+:root[data-lg="on"] .login-card {
+  backdrop-filter: blur(16px) saturate(160%) brightness(1.08);
+  -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(1.08);
+}
+@supports (backdrop-filter: url(#lg-filter)) {
+  :root[data-lg="on"] .topbar,
+  :root[data-lg="on"] .login-card {
+    backdrop-filter: blur(9px) saturate(160%) brightness(1.08) url(#lg-filter);
+    -webkit-backdrop-filter: blur(9px) saturate(160%) brightness(1.08) url(#lg-filter);
+  }
+}
 </style>
 </head>
 <body>
+<div id="bg-layer" aria-hidden="true"><div id="bg-dim"></div></div>
 <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
 <div id="toasts"></div>
 <div id="app"><div class="spin"></div></div>
 
-<!-- 液态玻璃引擎（hyalite v0.5.0，MIT © VII-Cae，见 public/hyalite.LICENSE） -->
-<script src="/hyalite.js"></script>
 <script>
 /* ═══════════ i18n ═══════════ */
 const I18N = {
@@ -1646,6 +1673,89 @@ function toggleLang(){
   location.reload();
 }
 
+/* ═══════════ 背景图 & 液态玻璃 ═══════════ */
+const BG_LS_KEY = 'cd_bg_image', BG_DIM_LS_KEY = 'cd_bg_dim', LG_LS_KEY = 'cd_lg';
+
+function bgCacheGet(){
+  try {
+    return { url: localStorage.getItem(BG_LS_KEY) || '', dim: Number(localStorage.getItem(BG_DIM_LS_KEY)) };
+  } catch { return { url: '', dim: 45 }; }
+}
+function bgCacheSet(url, dim){
+  try {
+    if (url) localStorage.setItem(BG_LS_KEY, url); else localStorage.removeItem(BG_LS_KEY);
+    localStorage.setItem(BG_DIM_LS_KEY, String(dim));
+  } catch {}
+}
+function lgEnabled(){
+  try { return localStorage.getItem(LG_LS_KEY) !== '0'; } catch { return true; }
+}
+
+/** 生成 256×256 位移贴图：中心 128（无位移），四条边按法线方向偏移 → 玻璃边缘折射 */
+function buildDisplacementMap(){
+  const S = 256, canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(S, S), d = img.data;
+  const edge = 0.10; // 边缘折射带宽度（占元素尺寸比例）
+  const profile = t => t >= edge ? 0 : Math.pow(1 - t / edge, 1.5);
+  for (let y = 0; y < S; y++){
+    const ty = y / (S - 1);
+    const gy = profile(Math.min(ty, 1 - ty));
+    for (let x = 0; x < S; x++){
+      const tx = x / (S - 1);
+      const gx = profile(Math.min(tx, 1 - tx));
+      const i = (y * S + x) * 4;
+      // 左半侧向右推、右半侧向左推（上下同理）→ 向内折射，形成透镜边缘
+      d[i]     = Math.round(128 + (tx < 0.5 ? 1 : -1) * gx * 127); // R: 水平位移
+      d[i + 1] = Math.round(128 + (ty < 0.5 ? 1 : -1) * gy * 127); // G: 垂直位移
+      d[i + 2] = 128;
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+let lgMapDataUrl = null;
+function injectLiquidGlassFilter(){
+  if (document.getElementById('lg-svg')) return;
+  if (!lgMapDataUrl) lgMapDataUrl = buildDisplacementMap();
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.id = 'lg-svg';
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('style', 'position:fixed;width:0;height:0;pointer-events:none');
+  const filter = document.createElementNS(NS, 'filter');
+  filter.setAttribute('id', 'lg-filter');
+  filter.setAttribute('color-interpolation-filters', 'sRGB');
+  filter.setAttribute('x', '0%'); filter.setAttribute('y', '0%');
+  filter.setAttribute('width', '100%'); filter.setAttribute('height', '100%');
+  filter.innerHTML =
+    `<feImage href="${lgMapDataUrl}" result="map" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none"/>` +
+    `<feDisplacementMap in="SourceGraphic" in2="map" scale="24" xChannelSelector="R" yChannelSelector="G" result="d"/>` +
+    `<feGaussianBlur in="d" stdDeviation="0.5"/>`;
+  svg.appendChild(filter);
+  document.body.appendChild(svg);
+}
+
+/** 应用背景图 + 遮罩，并按需开启液态玻璃（只在有背景图时才有折射可看） */
+function applyBg(url, dim){
+  const layer = document.getElementById('bg-layer');
+  if (!layer) return;
+  dim = Number(dim); if (!Number.isFinite(dim)) dim = 45;
+  dim = Math.max(0, Math.min(90, dim));
+  // 仅接受：https 外链 / 本站 /bg 地址 / 内联图片，防止注入非法 URL
+  const ok = typeof url === 'string' && /^(https:\/\/|\/bg\?|data:image\/)/.test(url);
+  layer.style.backgroundImage = ok ? `url("${url.replace(/"/g, '%22')}")` : 'none';
+  layer.classList.toggle('on', ok);
+  const dimEl = document.getElementById('bg-dim');
+  if (dimEl) dimEl.style.opacity = String(dim / 100);
+  const on = ok && lgEnabled();
+  document.documentElement.dataset.lg = on ? 'on' : 'off';
+  if (on) injectLiquidGlassFilter();
+}
+
 /* ═══════════ 模态框 ═══════════ */
 function openModal(html){
   closeModal();
@@ -1918,6 +2028,9 @@ async function showApp(){
   try{
     const s = await api('/api/admin/session');
     siteTitle = s.site_title || siteTitle;
+    // 同步后台背景图（服务器为准），并刷新本地缓存
+    applyBg(s.bg_image || '', s.bg_dim);
+    bgCacheSet(s.bg_image || '', s.bg_dim);
     // 隐藏路由：访问 /admin/apple 强制 Apple 玻璃风格（暗色紫蓝渐变）
     const path = location.pathname;
     if (/\/admin\/apple(\/|$)/.test(path)) {
@@ -3592,6 +3705,40 @@ async function loadSettings(){
         <input type="text" id="st-title" value="${esc(s.site_title)}">
       </div>
     </div>
+    <!-- 后台背景图 -->
+    <div class="glass group">
+      <div class="row" style="align-items:flex-start">
+        <div class="info" style="flex:1">
+          <div class="t">🖼️ ${LANG==='zh'?'后台背景图':'Background Image'}</div>
+          <div class="d" style="font-size:12px;line-height:1.6;margin-top:2px">${LANG==='zh'
+            ? '上传一张图片作为后台与登录页的背景（直接写入 R2，不会出现在文件列表里）；也可填写外链图片地址。'
+            : 'Upload an image as the admin & login background (stored straight in R2, not listed with your files). External URL is also supported.'}</div>
+        </div>
+        <div id="st-bg-preview" style="width:96px;height:60px;border-radius:12px;flex:none;border:1px solid var(--stroke);background:var(--sf-soft) center/cover no-repeat;${s.admin_bg_image ? `background-image:url('${esc(s.admin_bg_image)}')` : ''}"></div>
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <input type="text" id="st-bg-url" value="${esc(s.admin_bg_image ?? '')}" placeholder="${LANG==='zh'?'图片外链 https://… 或留空':'Image URL https://… or leave empty'}" style="flex:1;min-width:200px;padding:10px 12px;border-radius:12px;font-size:13px;color:var(--text);background:var(--sf-input);border:1px solid var(--stroke-strong);outline:none;font-family:ui-monospace,'SF Mono',monospace">
+        <label class="btn sm" style="cursor:pointer;position:relative;overflow:hidden"><span id="st-bg-upload-txt">📤 ${LANG==='zh'?'上传图片':'Upload'}</span>
+          <input type="file" id="st-bg-file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+        </label>
+        <button class="btn sm danger" id="st-bg-clear">🗑️ ${LANG==='zh'?'清除':'Clear'}</button>
+      </div>
+      <div class="row" style="align-items:center;gap:12px;margin-top:4px">
+        <div class="info"><div class="t">${LANG==='zh'?'背景遮罩':'Overlay'}</div><div class="d">${LANG==='zh'?'数值越大背景越暗，内容更清晰':'Higher = darker background, clearer content'}</div></div>
+        <input type="range" id="st-bg-dim" min="0" max="90" value="${s.admin_bg_dim ?? 45}" style="width:170px;accent-color:var(--blue)">
+        <span id="st-bg-dim-val" style="font-size:13px;color:var(--text-2);width:40px;text-align:right;font-variant-numeric:tabular-nums">${s.admin_bg_dim ?? 45}%</span>
+      </div>
+      <div class="row">
+        <div class="info"><div class="t">💧 ${LANG==='zh'?'液态玻璃效果':'Liquid Glass'}</div>
+          <div class="d" style="font-size:12px;line-height:1.6">${LANG==='zh'
+            ? '顶栏与登录卡片使用 SVG 位移折射玻璃（实验性）。Firefox 等不支持的浏览器会自动降级为普通毛玻璃。'
+            : 'Experimental SVG-refraction glass on the topbar & login card. Unsupported browsers (Firefox) fall back to plain frosted glass.'}</div></div>
+        <label class="switch"><input type="checkbox" id="st-lg" ${lgEnabled() ? 'checked' : ''}><span class="track"><span class="thumb"></span></span></label>
+      </div>
+      <div class="tip" style="margin-top:6px">${LANG==='zh'
+        ? '预览即时生效；点下方「保存设置」后对登录页与所有设备生效。'
+        : 'Preview applies instantly; click “Save” to apply to the login page and all devices.'}</div>
+    </div>
     <div class="glass group">
       <div class="row">
         <div class="info"><div class="t">📡 ${esc(t('trafficLimit'))}</div>
@@ -3969,6 +4116,61 @@ async function loadSettings(){
     const r = await api('/api/admin/logs?mode=all', { method:'DELETE' });
     toast(t('clearedN', {n: r.deleted}));
   });
+  // ── 背景图：外链输入 / 遮罩滑块 → 本地实时预览 ──
+  $('#st-bg-url')?.addEventListener('input', () => {
+    const url = $('#st-bg-url').value.trim();
+    applyBg(url, Number($('#st-bg-dim').value));
+    const pv = $('#st-bg-preview'); if (pv) pv.style.backgroundImage = /^(https:\/\/|\/bg\?|data:image\/)/.test(url) ? `url('${url}')` : 'none';
+  });
+  $('#st-bg-dim')?.addEventListener('input', () => {
+    const v = Number($('#st-bg-dim').value);
+    $('#st-bg-dim-val').textContent = v + '%';
+    applyBg($('#st-bg-url').value.trim(), v);
+  });
+  // ── 上传背景图：原始流直传后端 /api/admin/bg（写入存储后端固定 key）──
+  $('#st-bg-file')?.addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    if (f.size > 15 * 1024 * 1024) {
+      toast(LANG==='zh' ? '图片过大（≤15MB）' : 'Image too large (≤15MB)', 'err');
+      e.target.value = ''; return;
+    }
+    const txt = $('#st-bg-upload-txt');
+    const dim = Number($('#st-bg-dim').value);
+    if (txt) txt.textContent = '⏳';
+    try {
+      const r = await fetch('/api/admin/bg', { method:'POST', credentials:'same-origin', headers:{ 'content-type': f.type || 'image/jpeg' }, body: f });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.error || ('HTTP ' + r.status));
+      $('#st-bg-url').value = data.url;
+      applyBg(data.url, dim);
+      bgCacheSet(data.url, dim);
+      const pv = $('#st-bg-preview'); if (pv) pv.style.backgroundImage = `url('${data.url}')`;
+      toast(LANG==='zh' ? '背景图已上传' : 'Background uploaded');
+    } catch (err) {
+      toast((LANG==='zh' ? '上传失败：' : 'Upload failed: ') + (err.message || err), 'err');
+    } finally {
+      if (txt) txt.textContent = '📤 ' + (LANG==='zh' ? '上传图片' : 'Upload');
+      e.target.value = '';
+    }
+  });
+  // ── 清除背景图（立即生效）──
+  $('#st-bg-clear')?.addEventListener('click', async () => {
+    const dim = Number($('#st-bg-dim').value);
+    $('#st-bg-url').value = '';
+    applyBg('', dim);
+    bgCacheSet('', dim);
+    const pv = $('#st-bg-preview'); if (pv) pv.style.backgroundImage = 'none';
+    try {
+      await api('/api/admin/settings', { method:'PUT', body: JSON.stringify({ admin_bg_image: '' }) });
+      toast(LANG==='zh' ? '背景图已清除' : 'Background cleared');
+    } catch (err) { toast(err.message, 'err'); }
+  });
+  // ── 液态玻璃开关（本地偏好，立即生效）──
+  $('#st-lg')?.addEventListener('change', e => {
+    try { localStorage.setItem(LG_LS_KEY, e.target.checked ? '1' : '0'); } catch {}
+    applyBg($('#st-bg-url').value.trim(), Number($('#st-bg-dim').value));
+  });
+
   $('#st-save')?.addEventListener('click', async () => {
     // 现在只保存非 Modal 的设置项；Turnstile 和 OAuth Provider 在各自 Modal 里保存
     const body = {
@@ -3992,8 +4194,12 @@ async function loadSettings(){
       notify_event_quota: $('#st-notify-quota').checked,
       notify_event_login: $('#st-notify-login').checked,
       storage_provider: $('#st-backend').value,
+      admin_bg_image: $('#st-bg-url').value.trim(),
+      admin_bg_dim: Number($('#st-bg-dim').value) || 0,
     };
     await api('/api/admin/settings', { method:'PUT', body: JSON.stringify(body) });
+    applyBg(body.admin_bg_image, body.admin_bg_dim);
+    bgCacheSet(body.admin_bg_image, body.admin_bg_dim);
     toast(t('saved'));
     loadSettings();
   });
@@ -4596,6 +4802,9 @@ function showRecoveryCodes(codes){
 
 /* ═══════════ 启动 ═══════════ */
 (async () => {
+  // 登录前先用本地缓存恢复背景（此时还没有会话，不能读服务器设置），
+  // 避免登录页背景空白；登录成功后 showApp() 会以服务器设置为准并刷新缓存。
+  try { const c = bgCacheGet(); applyBg(c.url, c.dim); } catch {}
   try{
     const s = await api('/api/admin/session');
     siteTitle = s.site_title || siteTitle;
@@ -4607,42 +4816,6 @@ function showRecoveryCodes(codes){
   }
 })();
 
-/* ═══════════ 液态玻璃 ═══════════
-   ── 性能：挂载面从 ~90 砍到 3 ──────────────────────────────
-   上一版挂了三组：
-     .topbar,.sidebar,.modal        2~3
-     .glass,.group                  **20~40（各视图 41+ 处模板）**
-     .btn/.toast/.dropzone/.field…  **30~50**
-   合计可达 90 个 render surface。hyalite 自己的文档写着
-   "a modest number is fine; hundreds are not"，我正好撞在线上。
-
-   三个卡顿来源，本轮分别处理：
-   ① render surface 过多 —— .glass/.group 改回 backdrop-filter:none（原本就是 none），
-      XS 小件整体不再挂载 → admin 默认主题的 backdrop 面从几十个降到 3 个
-   ② 主线程 buildMap —— hyalite 挂载时要逐像素建位移图并编码 PNG，
-      切页/点击时挂几十个 = 主线程连续阻塞几百毫秒 → 点击卡
-   ③ 无限动画重绘 —— 见装饰层处的注释
-
-   现在只挂三个**固定/吸顶**元素：
-     .topbar  sticky，滚动时相对视口不动
-     .sidebar sticky，同上
-     .modal   fixed，只在弹窗打开时存在
-   fixed/sticky 元素是折射最划算的位置 —— 数量恒定、尺寸不变、不随内容滚动。
-
-   色散关掉（dispersion:0）：省每面 2 趟位移 + 2 趟合成，
-   彩虹边缘由纯 CSS 的 ④ 棱镜色边提供，视觉损失很小。
-   XS 小件、.glass/.group 见上方 CSS 的"性能回退"注释。 */
-/* ── 挂载：只剩 .modal ──
-   .topbar/.sidebar 已改纯 blur（见 CSS 处：sticky + 背后内容滚动 = 每帧重采样，
-   叠 hyalite 链成本太高），.glass/.group 本就是 none，XS 小件从不挂载。
-   .modal 是 openModal() 动态 innerHTML 创建的，且 closeModal() 会 remove()，
-   所以仍需 watch 才能捕获；但它只在弹窗打开时存在，且 fixed 全屏遮罩在打开期间
-   背后内容不滚动 → 打开期间的重采样是静止的，代价可接受。
-   色散 0 + sat 1：省 2 位移 + 2 合成 + 7 个滤镜节点。 */
-if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.modal',
-    { bevel: 37, thickness: 59, dispersion: 0, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10, sat: 1 });
-}
 </script>
 </body>
 </html>

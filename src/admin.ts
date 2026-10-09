@@ -1,7 +1,7 @@
 import type { Env } from "./types";
 import { ensureSchema, randomId, getSchemaStatus, repairDatabase } from "./db";
 import { generateCodes, makeBatchId, formatCodeStatus } from "./codes";
-import { getSettings, updateSettings } from "./settings";
+import { getSettings, updateSettings, BG_IMAGE_KEY } from "./settings";
 import { checkAdminKey, createSession, verifySession, clientIp, rateLimitLogin, requireAdminIp } from "./auth";
 import { pickLang } from "./i18n";
 import { hashPassword } from "./public";
@@ -400,6 +400,9 @@ export async function handleAdminApi(
       cloudflare_recovery: !!env.totp_recovery,
       recovery_remaining: s.totpRecoveryHash ? s.totpRecoveryHash.split(",").filter(Boolean).length : 0,
       ui_theme: s.uiTheme,
+      // 后台背景图（登录页也可用，前端先缓存再渲染）
+      bg_image: s.adminBgImage ?? "",
+      bg_dim: s.adminBgDim,
     });
   }
 
@@ -1515,6 +1518,9 @@ export async function handleAdminApi(
       webdav_username: s.webdavUsername,
       webdav_root_path: s.webdavRootPath,
       webdav_password_configured: !!s.webdavPasswordHash,
+      // 后台背景图
+      admin_bg_image: s.adminBgImage ?? "",
+      admin_bg_dim: s.adminBgDim,
     });
   }
 
@@ -1705,10 +1711,59 @@ export async function handleAdminApi(
       }
     }
 
+    // ── 后台背景图 ──
+    // 仅接受：站内 /bg 地址、https 外链、data:image/ 内联图；其余忽略，
+    // 防止把 javascript: / 任意协议塞进 CSS url()。
+    if (typeof body.admin_bg_image === "string") {
+      const u = body.admin_bg_image.trim();
+      if (u === "") {
+        patch.admin_bg_image = "";
+      } else if (/^(https:\/\/|\/bg\b|data:image\/)/i.test(u)) {
+        patch.admin_bg_image = u.slice(0, 65536);
+      }
+    }
+    const bgDim = num(body.admin_bg_dim);
+    if (bgDim !== null) patch.admin_bg_dim = String(Math.min(90, Math.floor(bgDim)));
+
     await updateSettings(env, patch);
     // storage 配置变了，清掉缓存的 storage provider 让下次请求用新配置
     _storagePromise = null;
     return json({ ok: true });
+  }
+
+  // ── 上传后台背景图 ────────────────────────────────
+  // 原始图片流直传当前存储后端（默认 R2）的固定 key，覆盖写入，不进文件列表；
+  // 写完后把 /bg?v=时间戳 写进设置，前端据此加载并打破浏览器缓存。
+  if (path === "/api/admin/bg" && method === "POST") {
+    const MAX_BG = 15 * 1024 * 1024; // 15MB
+    const mime = (req.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!/^image\//.test(mime)) {
+      return json({ error: msg(req, "只接受图片文件", "Only image files are accepted") }, 415);
+    }
+    if (!req.body) return json({ error: msg(req, "请求体为空", "Empty request body") }, 400);
+    const declared = Number(req.headers.get("content-length") || "0");
+    if (declared > MAX_BG) {
+      return json({ error: msg(req, "图片过大（≤15MB）", "Image too large (≤15MB)") }, 413);
+    }
+    let buf: ArrayBuffer;
+    try {
+      buf = await req.arrayBuffer();
+    } catch {
+      return json({ error: msg(req, "读取上传内容失败", "Failed to read upload") }, 400);
+    }
+    if (buf.byteLength === 0) return json({ error: msg(req, "请求体为空", "Empty request body") }, 400);
+    if (buf.byteLength > MAX_BG) {
+      return json({ error: msg(req, "图片过大（≤15MB）", "Image too large (≤15MB)") }, 413);
+    }
+    try {
+      const st = await storage(env);
+      await st.put(BG_IMAGE_KEY, buf, { contentType: mime });
+    } catch (err: any) {
+      return json({ error: msg(req, "存储写入失败", "Storage write failed"), detail: String(err?.message || err) }, 500);
+    }
+    const bgUrl = `/bg?v=${Date.now()}`;
+    await updateSettings(env, { admin_bg_image: bgUrl });
+    return json({ ok: true, url: bgUrl });
   }
 
   // ── 清空 Turnstile 访问计数 ────────────────────────

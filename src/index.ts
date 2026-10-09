@@ -127,6 +127,28 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     return serveAdminPage();
   }
 
+  // 公开背景图（登录页未鉴权也能加载）—— 读取存储后端里的固定 key。
+  // 仅当设置里确实指向 /bg 时才提供，否则 404，避免暴露存储对象。
+  if ((path === "/bg" || path === "/bg/") && (req.method === "GET" || req.method === "HEAD")) {
+    await ensureSchema(env);
+    const { getSettings, BG_IMAGE_KEY } = await import("./settings");
+    const s = await getSettings(env);
+    if (!s.adminBgImage || !s.adminBgImage.startsWith("/bg")) {
+      return new Response("Not Found", { status: 404 });
+    }
+    const { createStorageProvider } = await import("./storage");
+    const st = await createStorageProvider(env, s);
+    const obj = await st.get(BG_IMAGE_KEY).catch(() => null);
+    if (!obj) return new Response("Not Found", { status: 404 });
+    const headers = new Headers({
+      "content-type": obj.contentType || "image/jpeg",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-length": String(obj.size),
+    });
+    if (req.method === "HEAD") return new Response(null, { status: 200, headers });
+    return new Response(obj.body, { status: 200, headers });
+  }
+
   // PWA：manifest / 图标 / Service Worker
   if (path === "/manifest.webmanifest") {
     const { serveManifest } = await import("./pwa");

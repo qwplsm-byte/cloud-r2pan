@@ -1,5 +1,8 @@
 import type { Env } from "./types";
 
+/** 后台背景图在存储后端的固定对象 key（覆盖写入，不进文件列表） */
+export const BG_IMAGE_KEY = "bg/background";
+
 /* ═══════════ Settings 内存缓存 ═══════════
  * 问题：getSettings() 每次都 SELECT * FROM settings 全表查询，
  *       下载 / 分享 / OAuth / Turnstile 等高频路径都要调，
@@ -172,6 +175,12 @@ export interface Settings {
   notifyEventDownload: boolean;
   notifyEventQuota: boolean;
   notifyEventLogin: boolean;
+
+  // ═══════ 后台背景图（登录页 & 后台） ═══════
+  /** 背景图地址：站内 /bg?... 或 https 外链 或 data:image/…；null = 不显示 */
+  adminBgImage: string | null;
+  /** 背景遮罩浓度（0~90，数值越大背景越暗） */
+  adminBgDim: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -240,6 +249,9 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyEventDownload: false,
   notifyEventQuota: false,
   notifyEventLogin: false,
+  // 后台背景图 —— 默认无背景、遮罩 45%
+  adminBgImage: null,
+  adminBgDim: 45,
 };
 
 function toInt(v: unknown, fallback: number): number {
@@ -337,6 +349,9 @@ export async function getSettings(env: Env): Promise<Settings> {
     notifyEventDownload: map.get("notify_event_download") === "1",
     notifyEventQuota: map.get("notify_event_quota") === "1",
     notifyEventLogin: map.get("notify_event_login") === "1",
+    // 后台背景图
+    adminBgImage: map.get("admin_bg_image") ?? null,
+    adminBgDim: toInt(map.get("admin_bg_dim"), DEFAULT_SETTINGS.adminBgDim),
   };
 
   // ② 写入内存缓存
