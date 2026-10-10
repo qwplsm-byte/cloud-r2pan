@@ -67,6 +67,9 @@
   --btn-danger-color: #ffb3ae;
   --radius: 18px;
   --blue: #0a84ff;
+  /* 胶囊导航的「光」：顶部高光 + 外圈环境辉光 */
+  --nav-sheen: rgba(255,255,255,.55);
+  --nav-glow: rgba(10,132,255,.20);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -127,6 +130,8 @@
   --btn-danger-bg-active: rgba(255,59,48,.2);
   --btn-danger-border: rgba(255,59,48,.22);
   --btn-danger-color: #d70015;
+  --nav-sheen: rgba(255,255,255,.95);
+  --nav-glow: rgba(10,132,255,.22);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -184,6 +189,8 @@
   --btn-danger-border: rgba(255,59,48,.22);
   --btn-danger-color: #d70015;
   --radius: 24px;
+  --nav-sheen: rgba(255,255,255,.95);
+  --nav-glow: rgba(10,132,255,.22);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -237,6 +244,8 @@
   --btn-danger-bg-active: rgba(255,69,58,.36);
   --btn-danger-border: rgba(255,69,58,.4);
   --btn-danger-color: #ffb3ae;
+  --nav-sheen: rgba(255,255,255,.50);
+  --nav-glow: rgba(10,132,255,.28);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 button, a, input, select, label, summary { touch-action: manipulation; }
@@ -302,7 +311,7 @@ body {
 /* ── 顶栏 ─────────────────────────────── */
 .topbar {
   position: sticky; top: 12px; z-index: 50; margin-bottom: 22px;
-  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  display: flex; align-items: center; gap: 12px; padding: 12px 22px;
   background: var(--glass-strong);
   /* ── 性能：去掉 hyalite 折射与提色，只留一层纯 blur ──
      .topbar 是 sticky 且横跨整宽：页面一滚动，背后内容每帧都在变，
@@ -311,9 +320,14 @@ body {
      + saturate(1.6) brightness(1.08)，单帧成本是纯 blur 的好几倍。
      纯 blur(24px) 保留玻璃的通透感，成本降到约 1/4。
      ③高光线 ④色边 ⑤发丝环(静态 CSS)全部保留，观感主要来自这三层。 */
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--stroke); border-radius: 22px;
-  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-topbar-box);
+  backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  /* 胶囊导航：整条圆角 → 999px；「光」= 顶部内高光 + 外圈蓝色环境辉光 */
+  border: 1px solid var(--stroke); border-radius: 999px;
+  box-shadow:
+    var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)),
+    inset 0 1px 0 var(--nav-sheen),
+    0 18px 48px -12px var(--nav-glow),
+    var(--shadow-topbar-box);
 }
 :root[data-theme="apple"] .topbar,
 :root[data-theme="apple-dark"] .topbar {
@@ -321,7 +335,7 @@ body {
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
   border: 0.5px solid rgba(0,0,0,.08);
 }
-:root[data-theme="apple-dark"] .topbar { border: 1px solid var(--stroke-strong); box-shadow: 0 14px 40px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.25); }
+:root[data-theme="apple-dark"] .topbar { border: 1px solid var(--stroke-strong); box-shadow: inset 0 1px 0 var(--nav-sheen), 0 18px 48px -12px var(--nav-glow), 0 14px 40px rgba(0,0,0,.4); }
 .logo { width: 38px; height: 38px; border-radius: 12px; flex: none;
   display: flex; align-items: center; justify-content: center;
   background: linear-gradient(150deg, #67e8f9, #3b82f6 55%, #8b5cf6);
@@ -331,7 +345,7 @@ body {
 .topbar .sub { font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
 .topbar .spacer { flex: 1; }
 .traffic-pill {
-  display: flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 14px;
+  display: flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px;
   background: var(--sf); border: 1px solid var(--stroke);
   font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
   transition: background .2s;
@@ -350,8 +364,8 @@ body {
   /* 性能：同 .topbar —— sticky + 内容在背后滚动 → 每帧重新采样。
      改纯 blur(24px)，去掉 hyalite 位移/色散/提色链。 */
   backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--stroke); border-radius: 22px;
-  box-shadow: var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
+  border: 1px solid var(--stroke); border-radius: 26px;
+  box-shadow: inset 0 1px 0 var(--nav-sheen), var(--hyalite-edge, 0 0 0 .5px rgba(255,255,255,.10)), var(--shadow-glass);
   display: flex; flex-direction: column; gap: 4px; position: sticky; top: 90px;
   max-height: calc(100vh - 110px); overflow-y: auto; scrollbar-width: thin;
 }
@@ -365,7 +379,7 @@ body {
 .sidebar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 .sb-main {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px; border-radius: 14px; cursor: pointer;
+  padding: 9px 14px; border-radius: 999px; cursor: pointer;
   color: var(--text-2); font-size: 14px; font-weight: 600;
   background: transparent; border: none; font-family: inherit; text-align: left;
   transition: all .22s; width: 100%; user-select: none;
@@ -373,7 +387,7 @@ body {
 .sb-main:hover { background: var(--sf); color: var(--text); }
 .sb-main .ic { font-size: 17px; width: 22px; text-align: center; flex: none; }
 .sb-main .chev { margin-left: auto; font-size: 10px; opacity: .5; transition: transform .25s; }
-.sb-main.open { color: var(--text); background: var(--sf-strong); box-shadow: var(--shadow-inset-hi); }
+.sb-main.open { color: var(--text); background: var(--sf-strong); box-shadow: var(--shadow-inset-hi), 0 6px 18px -6px var(--nav-glow); }
 .sb-main.open .chev { transform: rotate(90deg); opacity: .8; }
 .sb-main.single .chev { display: none; }
 .sb-sub {
@@ -383,15 +397,16 @@ body {
 .sb-sub.open { max-height: 400px; }
 .sb-sub button {
   display: flex; align-items: center; gap: 9px;
-  padding: 7px 10px; border-radius: 10px; cursor: pointer;
+  padding: 7px 12px; border-radius: 999px; cursor: pointer;
   color: var(--text-3); font-size: 13px; font-weight: 500;
   background: transparent; border: none; font-family: inherit; text-align: left;
   transition: all .18s; width: 100%; user-select: none;
 }
 .sb-sub button:hover { color: var(--text); background: var(--sf); }
+/* 选中态：蓝色药丸 + 「光」（内描边 + 外辉光），与胶囊导航呼应 */
 .sb-sub button.active {
-  color: var(--text); background: rgba(10,132,255,.15);
-  box-shadow: inset 2px 0 0 #0a84ff, var(--shadow-inset-hi);
+  color: #fff; background: linear-gradient(135deg, #0a84ff, #3b82f6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 8px 20px -6px var(--nav-glow);
   font-weight: 600;
 }
 
@@ -496,6 +511,8 @@ body {
 .btn.danger:active { background: var(--btn-danger-bg-active); }
 .btn.sm { padding: 7px 12px; font-size: 12.5px; border-radius: 11px; box-shadow: none; }
 .btn.sm:hover { box-shadow: var(--shadow-btn-plain-hover); }
+/* 顶栏内的控件统一成胶囊，和导航条呼应 */
+.topbar > .btn.sm { border-radius: 999px; padding: 7px 15px; }
 .btn[disabled] { opacity: .4; pointer-events: none; }
 
 /* ── 上传区 ───────────────────────────── */
@@ -689,7 +706,8 @@ body {
 .actions-cell { display: flex; gap: 6px; }
 /* 移动端：保留全部表格列（外层 overflow-x 容器横向滚动），顶栏允许换行 */
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 14px; }
+  /* 窄屏顶栏会换行，胶囊圆角在大高度下会显得怪，改用大圆角矩形 */
+  .topbar { flex-wrap: wrap; gap: 8px 10px; padding: 10px 16px; border-radius: 28px; }
   .topbar .sub { display: none; }
   .topbar .spacer { display: none; }
   .traffic-pill { margin-left: auto; }
