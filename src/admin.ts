@@ -35,17 +35,32 @@ async function storage(env: Env): Promise<StorageProvider> {
 }
 
 /**
- * 解析 R2 S3 直传配置。
- * 只有当前存储后端就是 R2，且凭据齐全时才启用；返回 null 表示回退到
- * 「经 Worker 中转分片」的原有方式。
- * 取值优先级：后台设置（可网页随时改/轮换）> Worker Secret。
+ * 解析 S3 直传（预签名）配置。
+ * 支持任意 S3 兼容后端：通用 S3 用其自身凭据；R2 用 r2Direct* 设置 / Worker Secret。
+ * 凭据不齐时返回 null，表示回退到「经 Worker 中转分片」的方式。
  */
 async function directUpload(env: Env): Promise<DirectUploadConfig | null> {
   const st = await storage(env);
-  if (st.kind !== "r2") return null;
-
-  // ① 后台设置
   const s = await getSettings(env);
+
+  // ⓪ 通用 S3 兼容后端（非 R2）：直接复用该后端自身的 S3 凭据做直传，
+  //    这样直传不再局限于 CF R2，B2 / MinIO / 阿里云 OSS / 腾讯 COS 等同样可用。
+  if (st.kind === "s3") {
+    if (!s.s3Endpoint || !s.s3Bucket || !s.s3AccessKeyId || !s.s3SecretKeyCipher) return null;
+    const secret = await decryptSecret(s.s3SecretKeyCipher, env.admin);
+    if (!secret) return null;
+    return {
+      endpoint: s.s3Endpoint.replace(/\/+$/, ""),
+      region: s.s3Region || "us-east-1",
+      bucket: s.s3Bucket,
+      accessKeyId: s.s3AccessKeyId,
+      secretAccessKey: secret,
+      addressingStyle: (s.s3AddressingStyle as "path" | "virtual") || "path",
+    };
+  }
+
+  // ① 后台设置（仅 R2）
+  if (st.kind !== "r2") return null;
   if (s.r2DirectEndpoint && s.r2DirectAccessKeyId && s.r2DirectSecretCipher) {
     const secret = await decryptSecret(s.r2DirectSecretCipher, env.admin);
     if (secret) {
@@ -486,7 +501,7 @@ export async function handleAdminApi(
   if (path === "/api/admin/stats" && method === "GET") {
     // getSettings 内部已做跨月自动兜底，无需此处重复检查和 DB 写入
     const s = await getSettings(env);
-    const [files, shares, activeShares, totalDownloads, todayStat, chartRows, recent, banned] =
+    const [files, shares, activeShares, totalDownloads, todayStat, chartRows, recent, banned, storageBytes] =
       await Promise.all([
         env.db.prepare("SELECT COUNT(*) AS c FROM files").first<{ c: number }>(),
         env.db.prepare("SELECT COUNT(*) AS c FROM shares").first<{ c: number }>(),
@@ -502,10 +517,10 @@ export async function handleAdminApi(
         env.db.prepare(
           "SELECT day, bytes, downloads FROM traffic_stats WHERE day >= date('now', '-13 days') ORDER BY day"
         ).all<{ day: string; bytes: number; downloads: number }>(),
-        env.db.prepare(
-          "SELECT file_name, ip, browser, os, country, bytes, created_at FROM download_logs ORDER BY id DESC LIMIT 10"
-        ).all(),
+        env.db.prepare("SELECT file_name, ip, browser, os, country, bytes, created_at FROM download_logs ORDER BY id DESC LIMIT 10")
+          .all(),
         env.db.prepare("SELECT COUNT(*) AS c FROM banned_ips").first<{ c: number }>(),
+        env.db.prepare("SELECT COALESCE(SUM(size), 0) AS c FROM files").first<{ c: number }>(),
       ]);
 
     // 补齐 14 天（无数据的天补 0）
@@ -537,6 +552,7 @@ export async function handleAdminApi(
         downloads_today: todayStat?.downloads ?? 0,
         bytes_today: todayStat?.bytes ?? 0,
         banned: banned?.c ?? 0,
+        storage_bytes: storageBytes?.c ?? 0,
       },
       chart,
       recent: recent.results ?? [],

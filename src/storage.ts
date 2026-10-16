@@ -903,6 +903,8 @@ export interface DirectUploadConfig {
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
+  /** "path"（默认）= bucket 在 URL path；"virtual" = bucket 作为 hostname 前缀。R2 用 path */
+  addressingStyle?: "path" | "virtual";
 }
 
 /** 读取直传配置；缺任意一项就返回 null（表示未启用直传） */
@@ -927,13 +929,14 @@ function directS3Config(cfg: DirectUploadConfig): S3Config {
     bucket: cfg.bucket,
     accessKeyId: cfg.accessKeyId,
     secretAccessKey: cfg.secretAccessKey,
-    addressingStyle: "path",
+    addressingStyle: cfg.addressingStyle || "path",
   };
 }
 
-/** path-style 路径：/{bucket}/{key} */
+/** 对象路径：path-style 为 /{bucket}/{key}，virtual-style 为 /{key}（bucket 在 host 前缀） */
 function directPath(cfg: DirectUploadConfig, key: string): string {
-  return `/${cfg.bucket}/${key.split("/").map(encodeURIComponentStrict).join("/")}`;
+  const encoded = key.split("/").map(encodeURIComponentStrict).join("/");
+  return cfg.addressingStyle === "virtual" ? `/${encoded}` : `/${cfg.bucket}/${encoded}`;
 }
 
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -1024,7 +1027,11 @@ export async function presignUploadPart(
   query.set("X-Amz-Expires", String(expiresSeconds));
   query.set("X-Amz-SignedHeaders", "host");
 
-  const host = new URL(cfg.endpoint).hostname;
+  // 签名用的 Host 必须与**实际请求的 URL** 一致：virtual-style 下真实请求是
+  // https://<bucket>.endpoint/...，Host 带 bucket 前缀；path-style 下就是 endpoint 的 host。
+  // 用 .host（而非 .hostname）以保留非默认端口，否则服务端按 host:port 重算签名会对不上。
+  const endpointUrl = new URL(cfg.endpoint);
+  const host = cfg.addressingStyle === "virtual" ? `${cfg.bucket}.${endpointUrl.host}` : endpointUrl.host;
   // 预签名 URL 用 query 鉴权，payload 走 UNSIGNED-PAYLOAD（AWS 预签名标准做法）
   const { canonical } = buildCanonicalRequest("PUT", path, query, { host }, "UNSIGNED-PAYLOAD");
   const canonicalHash = await sha256Hex(canonical);
@@ -1033,7 +1040,8 @@ export async function presignUploadPart(
   const signature = bufToHex(await hmacSha256(signingKey, stringToSign));
   query.set("X-Amz-Signature", signature);
 
-  return `${cfg.endpoint}${path}?${strictQueryString(query)}`;
+  const base = cfg.addressingStyle === "virtual" ? `${endpointUrl.protocol}//${host}` : cfg.endpoint;
+  return `${base}${path}?${strictQueryString(query)}`;
 }
 
 /** ③ 列出已上传的分片（Worker 侧调用，拿权威 etag 列表，不依赖浏览器读响应头） */
