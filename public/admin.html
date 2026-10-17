@@ -7,8 +7,38 @@
 <title>cloud-r2pan</title>
 <style>
 /* ═══════════════════════════════════════════════════════════
-   默认主题：简洁暗色（无玻璃模糊）
-   ═══════════════════════════════════════════════════════════ */
+   为什么 admin 不挂 hyalite（2026-10-17 修复）
+   ───────────────────────────────────────────────────────────
+   上一版我在 admin 挂了 `Hyalite.watch(document, '.modal')`。
+   hyalite.js:608 会把 `--hyalite: url(#hyalite-N)` 写在**被挂载元素
+   自己的 inline style** 上，而 CSS 自定义属性默认向下继承 —— 于是
+   .modal 里的 .btn / .field input / .upload-item / .traffic-pill
+   全部拿到了「为整个大模态框尺寸算出来的位移图」。给一个 40px 高的
+   输入框套上大图位移 → 缩放完全错位 → Chromium 判定滤镜无效 →
+   backdrop 整体崩溃，露出后方亮层。
+
+   用户截图症状（暗色模式）：
+     · 输入框变成纯白色长条
+     · 取消按钮白底白字（完全不可读）
+     · 确定按钮变淡粉色
+     · 浅色模式下失去通透感
+   根因不是配色，是折射泄漏到了所有子元素。
+
+   评估过用 @property { inherits:false } 打补丁，但有坑：
+   若声明 initial-value，后代读 var(--hyalite, blur(12px)) 时会取到
+   initial-value 而不是 fallback → .btn 的毛玻璃反而消失。
+   不写 initial-value 可以，但那是在给一个收益很小的功能打补丁。
+
+   更重要的事实：admin 已经有一套**远端自写的 SVG 折射**
+   （data-lg / #lg-filter / feDisplacementMap，作用于 .topbar 和
+   .login-card）。两套折射系统并存只会互相干扰。
+   而 admin 里所有 var(--hyalite, 兜底) 的兜底值本身就是设计好的观感：
+     .btn → blur(12px)   .modal → blur(40px)   .modal-mask → blur(8px)
+   不挂 hyalite，它们就回到「以前那个更好看」的样子。
+
+   所以：admin 不加载 hyalite，也不引入冲突的 @property。
+   折射交给远端的自写实现；share / market 仍走 hyalite（那两个页面
+   没有这个继承问题 —— 挂载点内部只有纯文本）。 */
 :root {
   /* ── 液态玻璃（D1 + C 节提色）────────────────────────────
      原值：--bg-page:#0f0f10 · --orb-*:transparent · --orb-opacity:0 · --glass:#1c1c1f · --glass-strong:#242428
@@ -4844,23 +4874,13 @@ function showRecoveryCodes(codes){
 
 </script>
 
-<!-- 液态玻璃引擎（hyalite v0.5.0，MIT · 与 share/market 同一个文件，ETag 缓存）。
-     admin 自己另有一套自写 SVG 折射（见 data-lg 那段的 #lg-filter），
-     只作用于 .topbar / .login-card；hyalite 在 admin 只负责 .modal ——
-     弹窗是动态创建的、且不在自写玻璃的覆盖范围内。两套不重叠。 -->
-<script src="/hyalite.js"></script>
-<script>
-/* admin 的 hyalite 挂载：只挂模态框。
-   性能取舍（勿随意加回来）：
-     · .glass / .group 是 none（各视图 20~40 处，且大多互相嵌套）
-     · .topbar / .sidebar 是纯 blur —— sticky + 背后内容滚动 = 每帧重新采样，
-       叠 hyalite 整条链成本过高，且它们已被自写玻璃接管
-     · .modal 是 fixed 遮罩，只在打开时存在，期间背后不滚动 → 静止采样，代价可接受
-   色散 0 + sat 1：省 2 趟位移 + 2 趟合成 + 7 个滤镜节点。 */
-if (window.Hyalite && Hyalite.supported()) {
-  Hyalite.watch(document, '.modal',
-    { bevel: 37, thickness: 59, dispersion: 0, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10, sat: 1 });
-}
-</script>
+<!-- 注意：admin **不加载** hyalite.js。
+     原因见 <style> 顶部那段注释：hyalite 把 --hyalite 写在挂载元素的
+     inline style 上并向下继承，会让 .modal 里的输入框/按钮拿到错位的
+     位移图，导致 backdrop 崩溃（暗色下输入框变白、按钮白底白字）。
+     admin 的折射由远端自写的 SVG 实现负责（data-lg / #lg-filter，
+     作用于 .topbar 与 .login-card）；其余元素走各自 CSS 里设计好的
+     blur 兜底值，也就是用户认可的「以前更好看」的那个观感。
+     全局玻璃外观（高光/色边/发丝环）由 /glass.css 提供，不依赖 hyalite。 -->
 </body>
 </html>

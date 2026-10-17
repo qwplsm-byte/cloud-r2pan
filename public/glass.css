@@ -28,14 +28,7 @@
 
 :root {
   --lg-specular: rgba(255, 255, 255, .13);
-  --lg-specular-strong: rgba(255, 255, 255, .20);
   --lg-rim: rgba(255, 255, 255, .11);
-  --lg-rim-strong: rgba(255, 255, 255, .18);
-  --lg-tint-cool: rgba(0, 180, 255, .055);
-  --lg-tint-warm: rgba(255, 100, 200, .055);
-  --lg-well-dark: rgba(0, 0, 0, .18);
-  --lg-well-edge: rgba(255, 255, 255, .09);
-  --lg-well-rim: rgba(0, 0, 0, .18);
 }
 
 /* ── 浅色主题：高光必须反转 ─────────────────────────────────────
@@ -45,47 +38,20 @@
 :root[data-theme="light"],
 :root[data-theme="apple"] {
   --lg-specular: rgba(0, 0, 0, .07);
-  --lg-specular-strong: rgba(0, 0, 0, .10);
   --lg-rim: rgba(0, 0, 0, .10);
-  --lg-rim-strong: rgba(0, 0, 0, .16);
-  --lg-tint-cool: rgba(0, 120, 255, .05);
-  --lg-tint-warm: rgba(255, 60, 160, .05);
-  --lg-well-dark: rgba(0, 0, 0, .07);
-  --lg-well-edge: rgba(255, 255, 255, .85);
-  --lg-well-rim: rgba(0, 0, 0, .12);
-}
-
-/* ── 通用配方（可选类名，供后续新元素直接套用）────────────────── */
-/* A：玻璃"片" —— 徽章 / 提示条 / 元信息条 */
-.lg-chip {
-  background-image:
-    linear-gradient(180deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, 0) 44%),
-    radial-gradient(ellipse 60% 80% at 0% 50%, var(--lg-tint-cool) 0%, transparent 70%),
-    radial-gradient(ellipse 60% 80% at 100% 50%, var(--lg-tint-warm) 0%, transparent 70%);
-  outline: 1px solid var(--lg-rim); outline-offset: -1px;
-}
-/* B：玻璃"井" —— 输入框 / 凹槽 / 轨道（受光方向相反：顶暗底亮） */
-.lg-well {
-  background-image:
-    linear-gradient(180deg, var(--lg-well-dark) 0%, transparent 55%),
-    linear-gradient(0deg, var(--lg-well-edge) 0, var(--lg-well-edge) 1px, transparent 1px);
-  outline: 1px solid var(--lg-well-rim); outline-offset: -1px;
-}
-/* C：玻璃"面" —— 较大块面：横幅 / 空状态 */
-.lg-panel {
-  background-image:
-    linear-gradient(180deg, var(--lg-specular-strong) 0, var(--lg-specular-strong) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, .06) 0%, rgba(255, 255, 255, 0) 38%),
-    radial-gradient(ellipse 70% 90% at 0% 0%, var(--lg-tint-cool) 0%, transparent 72%),
-    radial-gradient(ellipse 70% 90% at 100% 100%, var(--lg-tint-warm) 0%, transparent 72%);
-  outline: 1px solid var(--lg-rim); outline-offset: -1px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   直接把配方挂到现有类名 —— 不需要改 HTML，也不在三份大文件里各抄一遍。
+   直接把玻璃外观挂到现有类名 —— 不需要改 HTML，也不在三份大文件里各抄一遍。
    只挑"自己有背景"的元素；纯布局容器（toolbar/stats/pager/card-head/
    actions/empty/hint）跳过 —— 给它们描边会凭空多出一个框。
+
+   ⚠️ 两条设计原则（2026-10-17 返工后确立）：
+   1) 玻璃感来自**边缘的一圈微光**，不是把内部压暗。
+      上一版给输入框/进度条叠了 rgba(0,0,0,.16~.22) 的暗部渐变，
+      在已是深色的底上再压暗 → 发闷发脏，用户反馈"暗色没以前美"。
+   2) 浅色主题下**不要**大面积叠白。浅底上叠 55% 白 = 刷成雾面，
+      通透感全丢。浅色只保留 1px 暗线勾边 + 极淡冷色晕。
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── share.html ─────────────────────────────────────────────── */
@@ -100,15 +66,14 @@
   background-image: linear-gradient(180deg, rgba(255, 255, 255, .15) 0, rgba(255, 255, 255, .15) 1px, transparent 1px);
   outline: 1px solid rgba(255, 255, 255, .11); outline-offset: -1px;
 }
-/* 进度条：桶身做成玻璃井 */
+/* 进度条：只加边缘 1px，不压暗内部（压暗会显得脏） */
 .code-progress {
-  background-image: linear-gradient(180deg, rgba(0, 0, 0, .20) 0%, transparent 60%);
-  outline: 1px solid rgba(0, 0, 0, .20); outline-offset: -1px;
+  outline: 1px solid rgba(255, 255, 255, .10); outline-offset: -1px;
 }
 /* 元信息行：只加 1px 顶光，不加框（本来就是背景上的文字） */
 .meta { background-image: linear-gradient(180deg, rgba(255, 255, 255, .10) 0, rgba(255, 255, 255, .10) 1px, transparent 1px); }
 /* 非主操作按钮：补发丝环；主操作(.primary)是实色蓝，保持原样 */
-.btn:not(.primary) { outline: 1px solid rgba(255, 255, 255, .14); outline-offset: -1px; }
+.btn:not(.primary) { outline: 1px solid rgba(255, 255, 255, .10); outline-offset: -1px; }
 
 /* ── market.html ────────────────────────────────────────────── */
 /* 卡片内徽章：与卡片同一块玻璃，只补镜面线，不加 blur */
@@ -132,10 +97,13 @@
 }
 /* 文件图标小方片 */
 .ficon { background-image: linear-gradient(180deg, rgba(255, 255, 255, .16) 0, rgba(255, 255, 255, .16) 1px, transparent 1px), linear-gradient(180deg, rgba(255, 255, 255, .06) 0%, transparent 45%); }
-/* 输入井 */
-.link-box input, .field input, .field select { background-image: linear-gradient(180deg, rgba(0, 0, 0, .16) 0%, transparent 58%); }
-/* 进度 / 用量条 */
-.prog, .progress { background-image: linear-gradient(180deg, rgba(0, 0, 0, .22) 0%, transparent 62%); outline: 1px solid rgba(0, 0, 0, .22); outline-offset: -1px; }
+/* 输入框 / 进度条：**不加任何 background-image**。
+   上一版在这里叠了 rgba(0,0,0,.16~.22) 的暗部渐变，本意是做"玻璃井"，
+   但在已经是深色的底上再压暗 → 输入框发闷、进度条发脏，
+   用户反馈"暗色模式 UI 没以前美"主要是这一条。
+   玻璃感应当来自边缘的一圈微光，而不是把内部填暗。 */
+.link-box input, .field input, .field select,
+.prog, .progress { outline: 1px solid rgba(255, 255, 255, .07); outline-offset: -1px; }
 /* 侧栏导航项：静态透明，只在 hover 底色上补顶光。
    ⚠️ 必须排除选中态 .open / .single —— 那两态是远端的"蓝色药丸"
    （background: linear-gradient(...) 简写）。本文件加载在本页 style 之后，
@@ -145,11 +113,16 @@
 /* 列表行 hover */
 .group .row:hover { background-image: linear-gradient(180deg, rgba(255, 255, 255, .08) 0, rgba(255, 255, 255, .08) 1px, transparent 1px); }
 /* 开关轨道 */
-.switch .track { background-image: linear-gradient(180deg, rgba(0, 0, 0, .20) 0%, transparent 60%); }
+/* 开关轨道：只描边，不压暗（同输入框的理由） */
+.switch .track { outline: 1px solid rgba(255, 255, 255, .07); outline-offset: -1px; }
 /* 表头底缘高光 */
 .tbl th { background-image: linear-gradient(0deg, rgba(255, 255, 255, .07) 0, rgba(255, 255, 255, .07) 1px, transparent 1px); }
 
-/* ── 浅色主题下，白高光全部换暗线（否则整层不可见）───────────── */
+/* ── 浅色主题：只保留"边缘"，去掉"受光面" ──────────────────────
+   浅色底上大面积叠白 = 把表面刷成雾面，通透感全丢。
+   浅色玻璃的正确读法是：几乎不改变内部明度，只在**边缘**留
+   1px 暗线（勾出边界）+ 极淡的冷色晕。所以这里刻意删掉了
+   深色分支里那层 rgba(255,255,255,.55) 的受光渐变。 */
 :root[data-theme="light"] .warn,
 :root[data-theme="light"] .err,
 :root[data-theme="light"] .ts-passed,
@@ -158,23 +131,27 @@
 :root[data-theme="light"] .banner,
 :root[data-theme="light"] .tag,
 :root[data-theme="light"] .ficon {
-  background-image:
-    linear-gradient(180deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, .55) 0%, transparent 44%);
+  background-image: linear-gradient(180deg,
+    var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px);
   outline-color: var(--lg-rim);
 }
 :root[data-theme="light"] .btn:not(.primary) { outline-color: var(--lg-rim); }
-:root[data-theme="light"] .code-progress,
-:root[data-theme="light"] .prog,
-:root[data-theme="light"] .progress {
-  background-image: linear-gradient(180deg, var(--lg-well-dark) 0%, transparent 60%);
-  outline-color: var(--lg-well-rim);
+:root[data-theme="light"] .code-progress {
+  outline-color: var(--lg-rim);
 }
 :root[data-theme="light"] .meta,
 :root[data-theme="light"] .sb-main:hover:not(.open):not(.single),
 :root[data-theme="light"] .sb-sub:hover:not(.open),
 :root[data-theme="light"] .group .row:hover { background-image: linear-gradient(180deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px); }
 :root[data-theme="light"] .tbl th { background-image: linear-gradient(0deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px); }
+/* 浅色下输入框/进度条只留极淡描边，不填充 —— 保持通透 */
+:root[data-theme="light"] .link-box input,
+:root[data-theme="light"] .field input,
+:root[data-theme="light"] .field select,
+:root[data-theme="light"] .prog,
+:root[data-theme="light"] .progress {
+  outline-color: rgba(0, 0, 0, .06);
+}
 
 /* ── 非 Chromium 兜底 ─────────────────────────────────────────
    本文件全是纯 CSS，Safari / Firefox 一样生效 —— 这正是"液态玻璃
