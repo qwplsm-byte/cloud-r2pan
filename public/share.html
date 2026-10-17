@@ -368,6 +368,9 @@ h1 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; word-break: brea
   .card::before { animation: none; }
 }
 </style>
+<!-- 全站共享的玻璃表面层：必须放在本页 inline <style> 之后，才能覆盖细节件的配色。
+     由 Worker 以 /glass.css 下发（ETag 协商缓存），四页共用一份。 -->
+<link rel="stylesheet" href="/glass.css">
 </head>
 <body>
 <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div><div class="orb o4"></div>

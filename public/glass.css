@@ -1,0 +1,183 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   glass.css —— 全站液态玻璃表面层（share / market / admin / 错误页 共用）
+
+   为什么单独抽一个文件
+     三份 HTML 都是"单文件 SPA"，各自 inline <style> 里已有主体玻璃；
+     但细节件（徽章 / 提示条 / 输入井 / 进度条 / 元信息）仍是半透明色块，
+     缺玻璃的三样光学特征：镜面高光、发丝环、色散微染。
+     这些分散在三页共 ~40 个类，写三遍必然漂移。抽成一份由 Worker 用 ETag
+     分发（与 /hyalite.js 同款），改一处全站生效。
+
+   ── 性能约束（必须遵守，否则会退回"卡"）──────────────────────────
+   本文件**只写静态属性**：
+     · background-image —— 光栅化时算一次，滚动/重绘不碰
+     · outline —— 不参与布局，不产生新图层
+   绝不写：backdrop-filter / filter:blur / animation / transition。
+   原因：这些细节件绝大多数是 .glass / .group / .card 的**后代**，
+   后代再挂 backdrop-filter 会去采样祖先已滤过的输出 ——
+   每多一层就多一次全屏重采样，而肉眼几乎看不出区别。
+   所以"铺满玻璃"在这里 = 让每块表面都具备玻璃的**光学特征**，
+   而不是让每块表面都独立做一次背景折射。
+
+   ── 层次（与 hyalite 六层对齐，走静态路线）─────────────────────
+     ① 镜面光  顶部 1px 亮线        —— background-image 第 1 层
+     ② 受光面  顶部向下的柔亮渐变    —— background-image 第 2 层
+     ③ 色散感  左右冷暖极淡微染      —— background-image 第 3/4 层
+     ④ 发丝环  1px 内描边            —— outline + outline-offset:-1px
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --lg-specular: rgba(255, 255, 255, .13);
+  --lg-specular-strong: rgba(255, 255, 255, .20);
+  --lg-rim: rgba(255, 255, 255, .11);
+  --lg-rim-strong: rgba(255, 255, 255, .18);
+  --lg-tint-cool: rgba(0, 180, 255, .055);
+  --lg-tint-warm: rgba(255, 100, 200, .055);
+  --lg-well-dark: rgba(0, 0, 0, .18);
+  --lg-well-edge: rgba(255, 255, 255, .09);
+  --lg-well-rim: rgba(0, 0, 0, .18);
+}
+
+/* ── 浅色主题：高光必须反转 ─────────────────────────────────────
+   admin 的 light/apple 主题底色接近白（--glass: rgba(255,255,255,.72)）。
+   白线上的白色高光在浅底上完全看不见 —— 这层玻璃就等于没铺。
+   浅色下"受光"的表现是：边缘偏暗的细线 + 底缘更亮。            */
+:root[data-theme="light"],
+:root[data-theme="apple"] {
+  --lg-specular: rgba(0, 0, 0, .07);
+  --lg-specular-strong: rgba(0, 0, 0, .10);
+  --lg-rim: rgba(0, 0, 0, .10);
+  --lg-rim-strong: rgba(0, 0, 0, .16);
+  --lg-tint-cool: rgba(0, 120, 255, .05);
+  --lg-tint-warm: rgba(255, 60, 160, .05);
+  --lg-well-dark: rgba(0, 0, 0, .07);
+  --lg-well-edge: rgba(255, 255, 255, .85);
+  --lg-well-rim: rgba(0, 0, 0, .12);
+}
+
+/* ── 通用配方（可选类名，供后续新元素直接套用）────────────────── */
+/* A：玻璃"片" —— 徽章 / 提示条 / 元信息条 */
+.lg-chip {
+  background-image:
+    linear-gradient(180deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, 0) 44%),
+    radial-gradient(ellipse 60% 80% at 0% 50%, var(--lg-tint-cool) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 80% at 100% 50%, var(--lg-tint-warm) 0%, transparent 70%);
+  outline: 1px solid var(--lg-rim); outline-offset: -1px;
+}
+/* B：玻璃"井" —— 输入框 / 凹槽 / 轨道（受光方向相反：顶暗底亮） */
+.lg-well {
+  background-image:
+    linear-gradient(180deg, var(--lg-well-dark) 0%, transparent 55%),
+    linear-gradient(0deg, var(--lg-well-edge) 0, var(--lg-well-edge) 1px, transparent 1px);
+  outline: 1px solid var(--lg-well-rim); outline-offset: -1px;
+}
+/* C：玻璃"面" —— 较大块面：横幅 / 空状态 */
+.lg-panel {
+  background-image:
+    linear-gradient(180deg, var(--lg-specular-strong) 0, var(--lg-specular-strong) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, .06) 0%, rgba(255, 255, 255, 0) 38%),
+    radial-gradient(ellipse 70% 90% at 0% 0%, var(--lg-tint-cool) 0%, transparent 72%),
+    radial-gradient(ellipse 70% 90% at 100% 100%, var(--lg-tint-warm) 0%, transparent 72%);
+  outline: 1px solid var(--lg-rim); outline-offset: -1px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   直接把配方挂到现有类名 —— 不需要改 HTML，也不在三份大文件里各抄一遍。
+   只挑"自己有背景"的元素；纯布局容器（toolbar/stats/pager/card-head/
+   actions/empty/hint）跳过 —— 给它们描边会凭空多出一个框。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── share.html ─────────────────────────────────────────────── */
+/* 提示条 / 错误条 / 计数条：彩色半透明底，加玻璃膜最见效 */
+.warn, .err, .ts-passed, .stat {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, .17) 0, rgba(255, 255, 255, .17) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, .06) 0%, transparent 44%);
+  outline: 1px solid rgba(255, 255, 255, .13); outline-offset: -1px;
+}
+.code-query-result, .code-bound-row {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .15) 0, rgba(255, 255, 255, .15) 1px, transparent 1px);
+  outline: 1px solid rgba(255, 255, 255, .11); outline-offset: -1px;
+}
+/* 进度条：桶身做成玻璃井 */
+.code-progress {
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, .20) 0%, transparent 60%);
+  outline: 1px solid rgba(0, 0, 0, .20); outline-offset: -1px;
+}
+/* 元信息行：只加 1px 顶光，不加框（本来就是背景上的文字） */
+.meta { background-image: linear-gradient(180deg, rgba(255, 255, 255, .10) 0, rgba(255, 255, 255, .10) 1px, transparent 1px); }
+/* 非主操作按钮：补发丝环；主操作(.primary)是实色蓝，保持原样 */
+.btn:not(.primary) { outline: 1px solid rgba(255, 255, 255, .14); outline-offset: -1px; }
+
+/* ── market.html ────────────────────────────────────────────── */
+/* 卡片内徽章：与卡片同一块玻璃，只补镜面线，不加 blur */
+.pill {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .20) 0, rgba(255, 255, 255, .20) 1px, transparent 1px);
+  outline: 1px solid rgba(255, 255, 255, .16); outline-offset: -1px;
+}
+
+/* ── admin.html ─────────────────────────────────────────────── */
+/* 警示横幅：橙色半透明底 + 玻璃膜 = 一块琥珀玻璃 */
+.banner {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, .18) 0, rgba(255, 255, 255, .18) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, .07) 0%, transparent 40%);
+  outline: 1px solid rgba(255, 255, 255, .16); outline-offset: -1px;
+}
+/* 状态徽章 */
+.tag {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .22) 0, rgba(255, 255, 255, .22) 1px, transparent 1px);
+  outline: 1px solid rgba(255, 255, 255, .18); outline-offset: -1px;
+}
+/* 文件图标小方片 */
+.ficon { background-image: linear-gradient(180deg, rgba(255, 255, 255, .16) 0, rgba(255, 255, 255, .16) 1px, transparent 1px), linear-gradient(180deg, rgba(255, 255, 255, .06) 0%, transparent 45%); }
+/* 输入井 */
+.link-box input, .field input, .field select { background-image: linear-gradient(180deg, rgba(0, 0, 0, .16) 0%, transparent 58%); }
+/* 进度 / 用量条 */
+.prog, .progress { background-image: linear-gradient(180deg, rgba(0, 0, 0, .22) 0%, transparent 62%); outline: 1px solid rgba(0, 0, 0, .22); outline-offset: -1px; }
+/* 侧栏导航项：静态透明，只在 hover 底色上补顶光。
+   ⚠️ 必须排除选中态 .open / .single —— 那两态是远端的"蓝色药丸"
+   （background: linear-gradient(...) 简写）。本文件加载在本页 style 之后，
+   若在这里无条件写 background-image，悬停选中项时会把药丸的渐变顶掉。 */
+.sb-main:hover:not(.open):not(.single),
+.sb-sub:hover:not(.open) { background-image: linear-gradient(180deg, rgba(255, 255, 255, .10) 0, rgba(255, 255, 255, .10) 1px, transparent 1px); }
+/* 列表行 hover */
+.group .row:hover { background-image: linear-gradient(180deg, rgba(255, 255, 255, .08) 0, rgba(255, 255, 255, .08) 1px, transparent 1px); }
+/* 开关轨道 */
+.switch .track { background-image: linear-gradient(180deg, rgba(0, 0, 0, .20) 0%, transparent 60%); }
+/* 表头底缘高光 */
+.tbl th { background-image: linear-gradient(0deg, rgba(255, 255, 255, .07) 0, rgba(255, 255, 255, .07) 1px, transparent 1px); }
+
+/* ── 浅色主题下，白高光全部换暗线（否则整层不可见）───────────── */
+:root[data-theme="light"] .warn,
+:root[data-theme="light"] .err,
+:root[data-theme="light"] .ts-passed,
+:root[data-theme="light"] .stat,
+:root[data-theme="light"] .pill,
+:root[data-theme="light"] .banner,
+:root[data-theme="light"] .tag,
+:root[data-theme="light"] .ficon {
+  background-image:
+    linear-gradient(180deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, .55) 0%, transparent 44%);
+  outline-color: var(--lg-rim);
+}
+:root[data-theme="light"] .btn:not(.primary) { outline-color: var(--lg-rim); }
+:root[data-theme="light"] .code-progress,
+:root[data-theme="light"] .prog,
+:root[data-theme="light"] .progress {
+  background-image: linear-gradient(180deg, var(--lg-well-dark) 0%, transparent 60%);
+  outline-color: var(--lg-well-rim);
+}
+:root[data-theme="light"] .meta,
+:root[data-theme="light"] .sb-main:hover:not(.open):not(.single),
+:root[data-theme="light"] .sb-sub:hover:not(.open),
+:root[data-theme="light"] .group .row:hover { background-image: linear-gradient(180deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px); }
+:root[data-theme="light"] .tbl th { background-image: linear-gradient(0deg, var(--lg-specular) 0, var(--lg-specular) 1px, transparent 1px); }
+
+/* ── 非 Chromium 兜底 ─────────────────────────────────────────
+   本文件全是纯 CSS，Safari / Firefox 一样生效 —— 这正是"液态玻璃
+   在所有浏览器上都看得见"的那一层。真折射（hyalite）才是 Chromium 专属。 */
+
+/* ── 无障碍：本文件不含动画，无需 reduced-motion 处理 ───────── */

@@ -788,6 +788,9 @@ body {
   }
 }
 </style>
+<!-- 全站共享的玻璃表面层：必须放在本页 inline <style> 之后，才能覆盖细节件的配色。
+     由 Worker 以 /glass.css 下发（ETag 协商缓存），四页共用一份。 -->
+<link rel="stylesheet" href="/glass.css">
 </head>
 <body>
 <div id="bg-layer" aria-hidden="true"><div id="bg-dim"></div></div>
@@ -1757,7 +1760,7 @@ function injectLiquidGlassFilter(){
   document.body.appendChild(svg);
 }
 
-/** 应用背景图 + 遮罩，并按需开启液态玻璃（只在有背景图时才有折射可看） */
+/** 应用背景图 + 遮罩，并开启液态玻璃 */
 function applyBg(url, dim){
   const layer = document.getElementById('bg-layer');
   if (!layer) return;
@@ -1769,7 +1772,12 @@ function applyBg(url, dim){
   layer.classList.toggle('on', ok);
   const dimEl = document.getElementById('bg-dim');
   if (dimEl) dimEl.style.opacity = String(dim / 100);
-  const on = ok && lgEnabled();
+  /* 液态玻璃不应依赖"有没有设背景图"。
+     原来写的是 `const on = ok && lgEnabled()`，ok 表示背景图 URL 有效 ——
+     于是**没设背景图的用户永远拿不到玻璃**，29 处 var(--hyalite, 兜底)
+     会静默降级成普通毛玻璃。玻璃是基础观感，背景图是可选项，两者解耦：
+     背景图只影响 #bg-layer 是否显示，玻璃开关只看用户偏好。 */
+  const on = lgEnabled();
   document.documentElement.dataset.lg = on ? 'on' : 'off';
   if (on) injectLiquidGlassFilter();
 }
@@ -4834,6 +4842,25 @@ function showRecoveryCodes(codes){
   }
 })();
 
+</script>
+
+<!-- 液态玻璃引擎（hyalite v0.5.0，MIT · 与 share/market 同一个文件，ETag 缓存）。
+     admin 自己另有一套自写 SVG 折射（见 data-lg 那段的 #lg-filter），
+     只作用于 .topbar / .login-card；hyalite 在 admin 只负责 .modal ——
+     弹窗是动态创建的、且不在自写玻璃的覆盖范围内。两套不重叠。 -->
+<script src="/hyalite.js"></script>
+<script>
+/* admin 的 hyalite 挂载：只挂模态框。
+   性能取舍（勿随意加回来）：
+     · .glass / .group 是 none（各视图 20~40 处，且大多互相嵌套）
+     · .topbar / .sidebar 是纯 blur —— sticky + 背后内容滚动 = 每帧重新采样，
+       叠 hyalite 整条链成本过高，且它们已被自写玻璃接管
+     · .modal 是 fixed 遮罩，只在打开时存在，期间背后不滚动 → 静止采样，代价可接受
+   色散 0 + sat 1：省 2 趟位移 + 2 趟合成 + 7 个滤镜节点。 */
+if (window.Hyalite && Hyalite.supported()) {
+  Hyalite.watch(document, '.modal',
+    { bevel: 37, thickness: 59, dispersion: 0, shade: .6, rim: 2.2, edge: 1.4, edgeW: 10, sat: 1 });
+}
 </script>
 </body>
 </html>

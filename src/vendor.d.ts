@@ -10,3 +10,12 @@ declare module "*/hyalite.js" {
   const source: string;
   export default source;
 }
+
+/**
+ * 全站共享的玻璃表面层。同样是 Text 模块 —— 打进 bundle 的是**文本**，
+ * 由 /glass.css 路由以 text/css 下发。
+ */
+declare module "*/glass.css" {
+  const source: string;
+  export default source;
+}

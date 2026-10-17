@@ -2,6 +2,7 @@ import adminHTML from "../public/admin.html";
 import shareHTML from "../public/share.html";
 import marketHTML from "../public/market.html";
 import hyaliteJS from "../public/hyalite.js";
+import glassCSS from "../public/glass.css";
 import { pickLang, type L10n } from "./i18n";
 
 /**
@@ -103,8 +104,12 @@ async function serveStaticHTML(html: string, req: Request): Promise<Response> {
  * CSP 前提：位移图是 data: URL，需要 `img-src data:`（本项目已有）。
  * 走与静态 HTML 相同的 ETag 协商缓存 —— 内容随 bundle 固定。
  */
-export async function serveHyalite(req: Request): Promise<Response> {
-  const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(hyaliteJS));
+/**
+ * 带 ETag 协商缓存的静态资源下发（hyalite.js / glass.css 共用）。
+ * 内容是 bundle 里固定的字符串，用内容 hash 做 ETag，跑 SHA-256 前 8 字节。
+ */
+async function serveTextAsset(req: Request, body: string, contentType: string): Promise<Response> {
+  const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
   let etag = '"';
   const bytes = new Uint8Array(hashBytes);
   for (let i = 0; i < 8; i++) etag += bytes[i].toString(16).padStart(2, "0");
@@ -112,13 +117,23 @@ export async function serveHyalite(req: Request): Promise<Response> {
 
   const ifNoneMatch = req.headers.get("if-none-match");
   const headers = new Headers({
-    "content-type": "text/javascript;charset=utf-8",
+    "content-type": contentType,
     "cache-control": "public, max-age=0, must-revalidate",
     "etag": etag,
   });
   addSecurityHeaders(headers);
   if (ifNoneMatch && ifNoneMatch.includes(etag)) return new Response(null, { status: 304, headers });
-  return new Response(hyaliteJS, { headers });
+  return new Response(body, { headers });
+}
+
+/** hyalite 液态玻璃引擎（MIT） */
+export async function serveHyalite(req: Request): Promise<Response> {
+  return serveTextAsset(req, hyaliteJS, "text/javascript;charset=utf-8");
+}
+
+/** 全站共享的玻璃表面层（share / market / admin / 错误页 共用一份） */
+export async function serveGlassCss(req: Request): Promise<Response> {
+  return serveTextAsset(req, glassCSS, "text/css;charset=utf-8");
 }
 
 export async function serveSharePage(req?: Request): Promise<Response> {
@@ -177,11 +192,13 @@ body {
   padding: 24px 16px 64px; color: #fff; overflow-x: hidden; position: relative;
   background: linear-gradient(160deg, #0b1026 0%, #1a1240 45%, #2a1045 100%);
 }
-.orb { position: fixed; border-radius: 50%; filter: blur(90px); opacity: .5; pointer-events: none; animation: drift 18s ease-in-out infinite alternate; }
-.o1 { width: 46vmax; height: 46vmax; background: #38bdf8; top: -18%; left: -14%; }
-.o2 { width: 40vmax; height: 40vmax; background: #8b5cf6; bottom: -20%; right: -10%; animation-delay: -6s; }
-.o3 { width: 30vmax; height: 30vmax; background: #ec4899; top: 55%; left: 8%; animation-delay: -12s; opacity: .35; }
-@keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(6vw, -5vh) scale(1.12); } }
+.orb { position: fixed; border-radius: 50%; pointer-events: none; }
+.o1 { width: 46vmax; height: 46vmax; top: -18%; left: -14%; opacity: .5;
+      background: radial-gradient(circle, #38bdf8 0%, rgba(56,189,248,0) 70%); }
+.o2 { width: 40vmax; height: 40vmax; bottom: -20%; right: -10%; opacity: .5;
+      background: radial-gradient(circle, #8b5cf6 0%, rgba(139,92,246,0) 70%); }
+.o3 { width: 30vmax; height: 30vmax; top: 55%; left: 8%; opacity: .35;
+      background: radial-gradient(circle, #ec4899 0%, rgba(236,72,153,0) 70%); }
 .card {
   position: relative; width: 100%; max-width: 420px; margin: auto; text-align: center;
   padding: 56px 36px 44px; border-radius: 32px;
@@ -191,6 +208,24 @@ body {
   box-shadow: 0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35);
   animation: rise .6s cubic-bezier(.22,1.2,.36,1) both;
 }
+/* 液态玻璃装饰层（与三份主页同一套静态配方：1px 镜面线 + 受光渐变 + 棱镜色边）
+   纯静态 CSS，无动画、无额外 render surface */
+.card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 3;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.10) 0%, transparent 45%),
+    linear-gradient(90deg, transparent 8%, rgba(255,255,255,.50) 50%, transparent 92%),
+    linear-gradient(105deg, transparent 40%, rgba(255,255,255,.10) 50%, transparent 60%);
+  background-size: 100% 100%, 100% 1px, 200% 100%; background-repeat: no-repeat;
+}
+.card::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
+  box-shadow:
+    inset  1px  0 0 0 rgba(0,180,255,.10),
+    inset -1px  0 0 0 rgba(255,100,200,.10),
+    inset  0  1px 0 0 rgba(100,255,180,.07),
+    inset  0 -1px 0 0 rgba(255,200,55,.07);
+}
 @keyframes rise { from { opacity: 0; transform: translateY(24px) scale(.96); } to { opacity: 1; transform: none; } }
 .icon {
   width: 84px; height: 84px; margin: 0 auto 22px; border-radius: 26px;
@@ -198,12 +233,28 @@ body {
   background: linear-gradient(145deg, rgba(255,255,255,.25), rgba(255,255,255,.08));
   border: 1px solid rgba(255,255,255,.3);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 10px 26px rgba(0,0,0,.3);
+  position: relative;
+}
+.icon::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.07) 0%, transparent 45%),
+    linear-gradient(90deg, transparent 8%, rgba(255,255,255,.50) 50%, transparent 92%);
+  background-size: 100% 100%, 100% 1px; background-repeat: no-repeat;
 }
 h1 { font-size: 24px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 12px; }
 p { font-size: 15px; line-height: 1.65; color: rgba(255,255,255,.78); }
+/* 主操作按钮：实色蓝不做折射，只补 1px 镜面高光（与三份主页的 .btn 同款处理） */
+a[href] { position: relative; }
+a[href]::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.28) 0, rgba(255,255,255,.28) 1px, transparent 1px);
+}
 .code { margin-top: 22px; font-size: 13px; color: rgba(255,255,255,.45); font-family: ui-monospace, "SF Mono", monospace; }
 .brand { position: fixed; bottom: 22px; left: 0; right: 0; text-align: center; font-size: 13px; color: rgba(255,255,255,.4); letter-spacing: .08em; }
 </style>
+<!-- 全站共享的玻璃表面层（与三份主页同一个文件，错误页也铺满玻璃） -->
+<link rel="stylesheet" href="/glass.css">
 </head>
 <body>
 <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
